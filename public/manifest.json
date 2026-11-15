@@ -1,0 +1,70 @@
+{
+  "id": "/",
+  "name": "Smart Landlord OS",
+  "short_name": "Landlord OS",
+  "description": "Minimalist progressive web app for rental property management, automated Nepali utility billing & expense tracking.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "window-controls-overlay", "browser"],
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "orientation": "any",
+  "categories": ["business", "finance", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Record Meter Readings",
+      "short_name": "Meters",
+      "description": "Enter monthly electricity and master utility bills",
+      "url": "/meter-input",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Invoice Register",
+      "short_name": "Invoices",
+      "description": "View and manage tenant invoices",
+      "url": "/invoices",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Payments Ledger",
+      "short_name": "Payments",
+      "description": "Track rent payments and payment receipts",
+      "url": "/payments",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Expense Ledger",
+      "short_name": "Expenses",
+      "description": "Track house and personal monthly expenses",
+      "url": "/expenses",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    }
+  ]
+}
