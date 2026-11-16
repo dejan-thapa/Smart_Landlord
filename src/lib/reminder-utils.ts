@@ -118,6 +118,23 @@ Please send the screenshot after payment. Dhanyabad!`;
 }
 
 /**
+ * Builds standard clean WhatsApp bill statement with eSewa details
+ */
+export function buildWhatsAppBillMessage(data: InvoiceReminderData): string {
+  const nepaliMonth = formatNepaliMonth(data.billingMonth);
+  const total = Number(data.totalDue).toLocaleString();
+  const accountHolder = data.bankDetails?.accountHolder || "Dejan Thapa";
+  const accountNo = data.bankDetails?.accountNo || "9842835084";
+
+  return `Here is your rent bill statement for *${nepaliMonth}* (*Room ${data.roomNo}*):\n\n` +
+    `*Total Due: Rs. ${total}*\n\n` +
+    `eSewa Payment Details:\n` +
+    `• Name: *${accountHolder}*\n` +
+    `• eSewa ID / Number: *${accountNo}*\n\n` +
+    `Please reply with the payment confirmation screenshot once transferred. Thank you!`;
+}
+
+/**
  * Builds a direct WhatsApp web/app link with encoded text
  */
 export function getWhatsAppUrl(phoneNumber: string | null | undefined, message: string): string {

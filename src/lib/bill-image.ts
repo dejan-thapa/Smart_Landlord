@@ -1,5 +1,10 @@
 import QRCode from "qrcode";
-import { InvoiceReminderData, formatNepaliMonth } from "@/lib/reminder-utils";
+import {
+  InvoiceReminderData,
+  formatNepaliMonth,
+  buildWhatsAppBillMessage,
+  normalizePhoneNumber,
+} from "@/lib/reminder-utils";
 
 /**
  * Payment QR payload (same JSON the bank-app QR contains, decoded from the original image).
@@ -263,8 +268,10 @@ export async function generateBillCardPng(
 }
 
 /**
- * Generates the Bill Card + QR PNG image and sends it directly to the tenant's saved WhatsApp
- * number in the background via `/api/whatsapp`.
+ * Sends or shares the bill statement + QR card image with the tenant.
+ * - On mobile devices (PWA / mobile browser): Uses the native Web Share API to share the bill image
+ *   and formatted text directly into WhatsApp, or opens the tenant's WhatsApp chat with prefilled text.
+ * - On desktop: Tries background delivery via the local WhatsApp connection; falls back to opening the modal.
  */
 export async function sendBillViaWhatsApp(
   data: InvoiceReminderData
@@ -277,6 +284,38 @@ export async function sendBillViaWhatsApp(
     };
   }
 
+  const isMobile =
+    typeof window !== "undefined" &&
+    (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+      (navigator.maxTouchPoints > 0 && window.innerWidth < 768));
+
+  // 1. On mobile devices, try the native Web Share API first so the user can send directly via their installed WhatsApp app
+  if (isMobile) {
+    try {
+      const { blob } = await generateBillCardPng(data);
+      const file = new File(
+        [blob],
+        `Bill-Room-${data.roomNo}-${data.billingMonth}.png`,
+        { type: "image/png" }
+      );
+      if (typeof navigator !== "undefined" && navigator.canShare && navigator.canShare({ files: [file] })) {
+        const text = buildWhatsAppBillMessage(data);
+        await navigator.share({
+          title: `Bill - Room ${data.roomNo}`,
+          text,
+          files: [file],
+        });
+        return { sent: true, needsModal: false };
+      }
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === "AbortError") {
+        // User dismissed the native share sheet
+        return { sent: false, needsModal: false };
+      }
+    }
+  }
+
+  // 2. Try the server-side WhatsApp bot (active when running on local machine with connected Baileys)
   try {
     const { base64 } = await generateBillCardPng(data);
     const nepaliMonth = formatNepaliMonth(data.billingMonth);
@@ -299,23 +338,39 @@ export async function sendBillViaWhatsApp(
       }),
     });
 
-    const json = await res.json();
-    if (json.success) {
-      return { sent: true, needsModal: false };
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success) {
+        return { sent: true, needsModal: false };
+      }
+      if (json.needsAuth) {
+        // If not connected on desktop, show modal
+        if (!isMobile) {
+          return { sent: false, needsModal: true };
+        }
+      }
     }
-    if (json.needsAuth) {
-      return { sent: false, needsModal: true };
-    }
-    return {
-      sent: false,
-      needsModal: false,
-      error: json.error || "Failed to send WhatsApp message.",
-    };
-  } catch (err) {
-    return {
-      sent: false,
-      needsModal: false,
-      error: err instanceof Error ? err.message : "Network error sending WhatsApp message.",
-    };
+  } catch {
+    // Serverless (e.g. Vercel) or local network unavailable
   }
+
+  // 3. Mobile Fallback: Direct WhatsApp chat link + copy image to clipboard
+  if (isMobile) {
+    const cleanPhone = normalizePhoneNumber(data.phoneNumber);
+    const text = buildWhatsAppBillMessage(data);
+
+    try {
+      const { blob } = await generateBillCardPng(data);
+      if (typeof navigator !== "undefined" && navigator.clipboard && window.ClipboardItem) {
+        await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      }
+    } catch {
+      // Clipboard copy optional
+    }
+
+    window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`, "_blank");
+    return { sent: true, needsModal: false };
+  }
+
+  return { sent: false, needsModal: true };
 }

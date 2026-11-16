@@ -14,8 +14,15 @@ import {
   QrCode,
   CheckCircle2,
   Banknote,
+  Share2,
+  ExternalLink,
 } from "lucide-react";
-import { InvoiceReminderData, formatNepaliMonth } from "@/lib/reminder-utils";
+import {
+  InvoiceReminderData,
+  formatNepaliMonth,
+  buildWhatsAppBillMessage,
+  normalizePhoneNumber,
+} from "@/lib/reminder-utils";
 import { generateBillCardPng, sendBillViaWhatsApp } from "@/lib/bill-image";
 
 interface ReminderModalProps {
@@ -47,6 +54,15 @@ export default function ReminderModal({
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [sentSuccess, setSentSuccess] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    setIsMobile(
+      typeof window !== "undefined" &&
+      (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+       (navigator.maxTouchPoints > 0 && window.innerWidth < 768))
+    );
+  }, []);
 
   const [waStatus, setWaStatus] = useState<WAStatus>("connecting");
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
@@ -86,6 +102,74 @@ export default function ReminderModal({
       setIsSending(false);
     }
   }, [customPhone, data, onClose, onSent]);
+
+  const handleShareOrSend = async () => {
+    if (!customPhone.trim()) {
+      setErrorMsg("Please enter a tenant WhatsApp number above.");
+      return;
+    }
+    setIsSending(true);
+    setErrorMsg(null);
+    setStatusMsg(null);
+
+    // If server-side Baileys is active and connected, send automatically
+    if (waStatus === "connected") {
+      await handleSendDirect();
+      return;
+    }
+
+    // On mobile / modern browsers, try native Web Share API with image file
+    try {
+      const { blob } = await generateBillCardPng({ ...data, phoneNumber: customPhone.trim() });
+      const file = new File(
+        [blob],
+        `Bill-Room-${data.roomNo}-${data.billingMonth}.png`,
+        { type: "image/png" }
+      );
+      const text = buildWhatsAppBillMessage({ ...data, phoneNumber: customPhone.trim() });
+
+      if (typeof navigator !== "undefined" && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          title: `Bill - Room ${data.roomNo}`,
+          text,
+          files: [file],
+        });
+        setSentSuccess(true);
+        setStatusMsg("✓ Shared to WhatsApp!");
+        onSent?.();
+        setTimeout(() => onClose(), 1500);
+        return;
+      }
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === "AbortError") {
+        setIsSending(false);
+        return;
+      }
+    }
+
+    // Direct WhatsApp web/app link fallback: open chat & copy image to clipboard
+    try {
+      const cleanPhone = normalizePhoneNumber(customPhone);
+      const text = buildWhatsAppBillMessage({ ...data, phoneNumber: customPhone.trim() });
+
+      try {
+        const { blob } = await generateBillCardPng({ ...data, phoneNumber: customPhone.trim() });
+        if (typeof navigator !== "undefined" && navigator.clipboard && window.ClipboardItem) {
+          await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+          setStatusMsg("✓ Bill image copied! Opening WhatsApp... Paste in chat.");
+        }
+      } catch {
+        // Optional clipboard copy
+      }
+
+      window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`, "_blank");
+      setSentSuccess(true);
+      onSent?.();
+      setTimeout(() => onClose(), 2000);
+    } finally {
+      setIsSending(false);
+    }
+  };
 
   // Poll /api/whatsapp every 2.5s while modal is open and not yet connected
   useEffect(() => {
@@ -231,37 +315,53 @@ export default function ReminderModal({
 
         {/* Modal Body */}
         <div className="p-5 overflow-y-auto space-y-4 flex-1">
-          {/* One-Time WhatsApp Link QR Card when not connected */}
+          {/* Mobile vs Desktop Connection Card */}
           {waStatus !== "connected" && (
-            <div className="bg-white dark:bg-slate-800/90 border border-emerald-200 dark:border-emerald-800 rounded-2xl p-4 space-y-3 shadow-xs">
-              <div className="flex items-center gap-2">
-                <QrCode size={18} className="text-[#25D366] shrink-0" />
-                <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Link Your WhatsApp (One-Time Setup)
-                </h4>
+            isMobile ? (
+              <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl p-4 flex items-center gap-3 shadow-xs">
+                <div className="w-10 h-10 rounded-xl bg-[#25D366] text-white flex items-center justify-center shrink-0 shadow-sm">
+                  <MessageSquare size={20} />
+                </div>
+                <div className="flex-1">
+                  <h4 className="text-sm font-bold text-emerald-950 dark:text-emerald-100">
+                    Send via WhatsApp App
+                  </h4>
+                  <p className="text-xs text-emerald-800/80 dark:text-emerald-300">
+                    Tap the green button below to send the bill statement and image directly via WhatsApp!
+                  </p>
+                </div>
               </div>
-              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                Open WhatsApp on your phone → <strong>Linked Devices</strong> →{" "}
-                <strong>Link a Device</strong> → Scan this QR code. Once linked, bills send in 1 click!
-              </p>
-              <div className="flex flex-col items-center justify-center py-2">
-                {qrDataUrl ? (
-                  <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={qrDataUrl}
-                      alt="WhatsApp Link QR Code"
-                      className="w-52 h-52 object-contain"
-                    />
-                  </div>
-                ) : (
-                  <div className="w-52 h-52 rounded-2xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center gap-2 text-slate-500 dark:text-slate-400">
-                    <Loader2 size={24} className="animate-spin text-[#25D366]" />
-                    <span className="text-xs font-medium">Generating QR code…</span>
-                  </div>
-                )}
+            ) : (
+              <div className="bg-white dark:bg-slate-800/90 border border-emerald-200 dark:border-emerald-800 rounded-2xl p-4 space-y-3 shadow-xs">
+                <div className="flex items-center gap-2">
+                  <QrCode size={18} className="text-[#25D366] shrink-0" />
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Link Your WhatsApp (Optional Desktop Auto-Send)
+                  </h4>
+                </div>
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                  Open WhatsApp on your phone → <strong>Linked Devices</strong> →{" "}
+                  <strong>Link a Device</strong> → Scan this QR code to enable 1-click auto-sending from your PC.
+                </p>
+                <div className="flex flex-col items-center justify-center py-2">
+                  {qrDataUrl ? (
+                    <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={qrDataUrl}
+                        alt="WhatsApp Link QR Code"
+                        className="w-52 h-52 object-contain"
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-52 h-52 rounded-2xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center gap-2 text-slate-500 dark:text-slate-400">
+                      <Loader2 size={24} className="animate-spin text-[#25D366]" />
+                      <span className="text-xs font-medium">Generating QR code…</span>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            )
           )}
 
           {/* Recipient Phone Row */}
@@ -435,24 +535,34 @@ export default function ReminderModal({
 
           <button
             type="button"
-            disabled={isSending || sentSuccess || !hasPhone || waStatus !== "connected"}
-            onClick={handleSendDirect}
+            disabled={isSending || sentSuccess || !hasPhone}
+            onClick={handleShareOrSend}
             className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#25D366] hover:bg-[#20ba59] disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-emerald-500/20 transition-all cursor-pointer"
           >
             {isSending ? (
               <>
                 <Loader2 size={14} className="animate-spin" />
-                Sending…
+                Preparing…
               </>
             ) : sentSuccess ? (
               <>
                 <CheckCircle2 size={14} />
-                Sent!
+                Done!
+              </>
+            ) : waStatus === "connected" ? (
+              <>
+                <Send size={14} />
+                Send Automatically (1-Click)
+              </>
+            ) : isMobile ? (
+              <>
+                <Share2 size={14} />
+                Send via WhatsApp App
               </>
             ) : (
               <>
-                <Send size={14} />
-                Send Bill on WhatsApp
+                <ExternalLink size={14} />
+                Open in WhatsApp Web
               </>
             )}
           </button>
