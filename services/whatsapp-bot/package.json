@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "24/7 WhatsApp Cloud Microservice for Smart Landlord OS",
   "main": "server.js",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
     "start": "node server.js"
   },

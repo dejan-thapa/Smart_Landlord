@@ -24,7 +24,17 @@ const QR_IMAGE_PATH = path.join(__dirname, "payment-qr-only.png");
 // Optional Supabase sync for immortal session persistence on ephemeral containers
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY;
-const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
+let wsTransport;
+if (typeof globalThis.WebSocket === "undefined") {
+  try {
+    wsTransport = require("ws");
+  } catch {}
+}
+const supabase = (supabaseUrl && supabaseKey)
+  ? createClient(supabaseUrl, supabaseKey, {
+      ...(wsTransport ? { realtime: { transport: wsTransport } } : {}),
+    })
+  : null;
 
 app.use(cors());
 app.use(express.json({ limit: "50mb" }));
