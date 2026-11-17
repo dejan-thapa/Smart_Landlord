@@ -103,22 +103,51 @@ export default function ReminderModal({
     }
   }, [customPhone, data, onClose, onSent]);
 
-  const handleShareOrSend = async () => {
+  const handleOpenWhatsAppDirect = async () => {
     if (!customPhone.trim()) {
       setErrorMsg("Please enter a tenant WhatsApp number above.");
       return;
     }
     setIsSending(true);
     setErrorMsg(null);
-    setStatusMsg(null);
+    setStatusMsg("Opening WhatsApp…");
 
-    // If server-side Baileys is active and connected, send automatically
-    if (waStatus === "connected") {
-      await handleSendDirect();
+    try {
+      // 1. Try copying the visual bill card to clipboard so the user can paste it
+      try {
+        const { blob } = await generateBillCardPng({ ...data, phoneNumber: customPhone.trim() });
+        if (typeof navigator !== "undefined" && navigator.clipboard && window.ClipboardItem) {
+          await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+          setStatusMsg("✓ Bill image copied to clipboard! Just tap Paste in WhatsApp chat.");
+        }
+      } catch {}
+
+      // 2. Open WhatsApp directly via universal deep-link
+      const cleanPhone = normalizePhoneNumber(customPhone);
+      const text = buildWhatsAppBillMessage({ ...data, phoneNumber: customPhone.trim() });
+      const waUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(text)}`;
+
+      if (isMobile) {
+        window.location.href = waUrl;
+      } else {
+        window.open(waUrl, "_blank");
+      }
+
+      setSentSuccess(true);
+      onSent?.();
+      setTimeout(() => onClose(), 1800);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleShareNative = async () => {
+    if (!customPhone.trim()) {
+      setErrorMsg("Please enter a tenant WhatsApp number above.");
       return;
     }
-
-    // On mobile / modern browsers, try native Web Share API with image file
+    setIsGenerating(true);
+    setErrorMsg(null);
     try {
       const { blob } = await generateBillCardPng({ ...data, phoneNumber: customPhone.trim() });
       const file = new File(
@@ -135,39 +164,16 @@ export default function ReminderModal({
           files: [file],
         });
         setSentSuccess(true);
-        setStatusMsg("✓ Shared to WhatsApp!");
         onSent?.();
         setTimeout(() => onClose(), 1500);
-        return;
+      } else {
+        await handleOpenWhatsAppDirect();
       }
     } catch (err: unknown) {
-      if (err instanceof Error && err.name === "AbortError") {
-        setIsSending(false);
-        return;
-      }
-    }
-
-    // Direct WhatsApp web/app link fallback: open chat & copy image to clipboard
-    try {
-      const cleanPhone = normalizePhoneNumber(customPhone);
-      const text = buildWhatsAppBillMessage({ ...data, phoneNumber: customPhone.trim() });
-
-      try {
-        const { blob } = await generateBillCardPng({ ...data, phoneNumber: customPhone.trim() });
-        if (typeof navigator !== "undefined" && navigator.clipboard && window.ClipboardItem) {
-          await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-          setStatusMsg("✓ Bill image copied! Opening WhatsApp... Paste in chat.");
-        }
-      } catch {
-        // Optional clipboard copy
-      }
-
-      window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`, "_blank");
-      setSentSuccess(true);
-      onSent?.();
-      setTimeout(() => onClose(), 2000);
+      if (err instanceof Error && err.name === "AbortError") return;
+      await handleOpenWhatsAppDirect();
     } finally {
-      setIsSending(false);
+      setIsGenerating(false);
     }
   };
 
@@ -533,39 +539,44 @@ export default function ReminderModal({
             </button>
           </div>
 
-          <button
-            type="button"
-            disabled={isSending || sentSuccess || !hasPhone}
-            onClick={handleShareOrSend}
-            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#25D366] hover:bg-[#20ba59] disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-emerald-500/20 transition-all cursor-pointer"
-          >
-            {isSending ? (
-              <>
-                <Loader2 size={14} className="animate-spin" />
-                Preparing…
-              </>
-            ) : sentSuccess ? (
-              <>
-                <CheckCircle2 size={14} />
-                Done!
-              </>
-            ) : waStatus === "connected" ? (
-              <>
-                <Send size={14} />
-                Send Automatically (1-Click)
-              </>
-            ) : isMobile ? (
-              <>
+          <div className="flex items-center gap-2">
+            {isMobile && (
+              <button
+                type="button"
+                disabled={isGenerating || isSending || !hasPhone}
+                onClick={handleShareNative}
+                className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 text-emerald-800 dark:text-emerald-200 text-xs font-bold transition-colors cursor-pointer"
+                title="Share bill card image file and text via system menu"
+              >
                 <Share2 size={14} />
-                Send via WhatsApp App
-              </>
-            ) : (
-              <>
-                <ExternalLink size={14} />
-                Open in WhatsApp Web
-              </>
+                Share Image
+              </button>
             )}
-          </button>
+
+            <button
+              type="button"
+              disabled={isSending || sentSuccess || !hasPhone}
+              onClick={handleOpenWhatsAppDirect}
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#25D366] hover:bg-[#20ba59] disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-emerald-500/20 transition-all cursor-pointer"
+            >
+              {isSending ? (
+                <>
+                  <Loader2 size={14} className="animate-spin" />
+                  Opening…
+                </>
+              ) : sentSuccess ? (
+                <>
+                  <CheckCircle2 size={14} />
+                  Opened!
+                </>
+              ) : (
+                <>
+                  <MessageSquare size={14} />
+                  Open in WhatsApp
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </div>

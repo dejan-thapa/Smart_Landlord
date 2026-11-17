@@ -78,6 +78,10 @@ export default function InvoiceCardItem({ inv }: { inv: InvoiceWithTenant }) {
                 aria-label={`Send WhatsApp bill for Room ${tenant?.room_no}`}
                 onClick={async (e) => {
                   e.stopPropagation();
+                  if (!tenant?.phone_number || !tenant.phone_number.trim()) {
+                    setShowReminder(true);
+                    return;
+                  }
                   setIsSendingWA(true);
                   try {
                     const res = await sendBillViaWhatsApp(reminderData);

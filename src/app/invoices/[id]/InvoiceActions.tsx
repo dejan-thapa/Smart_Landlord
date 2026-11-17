@@ -237,6 +237,10 @@ export default function InvoiceActions({
 
   const handleSendWhatsApp = async () => {
     if (!reminderData) return;
+    if (!reminderData.phoneNumber || !reminderData.phoneNumber.trim()) {
+      setShowReminderModal(true);
+      return;
+    }
     setIsSendingWA(true);
     setWaStatus("idle");
     try {

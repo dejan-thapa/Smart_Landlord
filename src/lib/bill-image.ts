@@ -269,12 +269,13 @@ export async function generateBillCardPng(
 
 /**
  * Sends or shares the bill statement + QR card image with the tenant.
- * - On mobile devices (PWA / mobile browser): Uses the native Web Share API to share the bill image
- *   and formatted text directly into WhatsApp, or opens the tenant's WhatsApp chat with prefilled text.
- * - On desktop: Tries background delivery via the local WhatsApp connection; falls back to opening the modal.
+ * - On mobile devices (PWA / mobile browser): Immediately opens the tenant's WhatsApp chat
+ *   via universal WhatsApp deep-link with prefilled statement and copies the visual bill card to clipboard.
+ * - On desktop: Tries background delivery via the local WhatsApp connection; falls back to opening WhatsApp Web.
  */
 export async function sendBillViaWhatsApp(
-  data: InvoiceReminderData
+  data: InvoiceReminderData,
+  options?: { forceDirect?: boolean }
 ): Promise<{ sent: boolean; needsModal: boolean; error?: string }> {
   if (!data.phoneNumber || !data.phoneNumber.trim()) {
     return {
@@ -289,33 +290,43 @@ export async function sendBillViaWhatsApp(
     (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
       (navigator.maxTouchPoints > 0 && window.innerWidth < 768));
 
-  // 1. On mobile devices, try the native Web Share API first so the user can send directly via their installed WhatsApp app
-  if (isMobile) {
+  // 1. On mobile devices / PWA or when forced direct:
+  // ALWAYS open WhatsApp directly on the user's device!
+  if (isMobile || options?.forceDirect) {
     try {
-      const { blob } = await generateBillCardPng(data);
-      const file = new File(
-        [blob],
-        `Bill-Room-${data.roomNo}-${data.billingMonth}.png`,
-        { type: "image/png" }
-      );
-      if (typeof navigator !== "undefined" && navigator.canShare && navigator.canShare({ files: [file] })) {
-        const text = buildWhatsAppBillMessage(data);
-        await navigator.share({
-          title: `Bill - Room ${data.roomNo}`,
-          text,
-          files: [file],
-        });
-        return { sent: true, needsModal: false };
+      // Try copying the visual bill card to clipboard so the user can just tap Paste in WhatsApp
+      try {
+        const { blob } = await generateBillCardPng(data);
+        if (typeof navigator !== "undefined" && navigator.clipboard && window.ClipboardItem) {
+          await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+        }
+      } catch {
+        // Clipboard copy optional progressive enhancement
       }
+
+      const cleanPhone = normalizePhoneNumber(data.phoneNumber);
+      const text = buildWhatsAppBillMessage(data);
+      const waUrl = cleanPhone
+        ? `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(text)}`
+        : `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+
+      if (isMobile) {
+        window.location.href = waUrl;
+      } else {
+        window.open(waUrl, "_blank");
+      }
+
+      return { sent: true, needsModal: false };
     } catch (err: unknown) {
-      if (err instanceof Error && err.name === "AbortError") {
-        // User dismissed the native share sheet
-        return { sent: false, needsModal: false };
-      }
+      return {
+        sent: false,
+        needsModal: false,
+        error: err instanceof Error ? err.message : "Could not open WhatsApp.",
+      };
     }
   }
 
-  // 2. Try the server-side WhatsApp bot (active when running on local machine with connected Baileys)
+  // 2. On desktop PC, try the local background WhatsApp bot if connected
   try {
     const { base64 } = await generateBillCardPng(data);
     const nepaliMonth = formatNepaliMonth(data.billingMonth);
@@ -344,33 +355,17 @@ export async function sendBillViaWhatsApp(
         return { sent: true, needsModal: false };
       }
       if (json.needsAuth) {
-        // If not connected on desktop, show modal
-        if (!isMobile) {
-          return { sent: false, needsModal: true };
-        }
+        return { sent: false, needsModal: true };
       }
     }
   } catch {
     // Serverless (e.g. Vercel) or local network unavailable
   }
 
-  // 3. Mobile Fallback: Direct WhatsApp chat link + copy image to clipboard
-  if (isMobile) {
-    const cleanPhone = normalizePhoneNumber(data.phoneNumber);
-    const text = buildWhatsAppBillMessage(data);
-
-    try {
-      const { blob } = await generateBillCardPng(data);
-      if (typeof navigator !== "undefined" && navigator.clipboard && window.ClipboardItem) {
-        await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-      }
-    } catch {
-      // Clipboard copy optional
-    }
-
-    window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`, "_blank");
-    return { sent: true, needsModal: false };
-  }
-
-  return { sent: false, needsModal: true };
+  // 3. Desktop Fallback: open WhatsApp Web with prefilled message
+  const cleanPhone = normalizePhoneNumber(data.phoneNumber);
+  const text = buildWhatsAppBillMessage(data);
+  const waUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(text)}`;
+  window.open(waUrl, "_blank");
+  return { sent: true, needsModal: false };
 }
