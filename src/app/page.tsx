@@ -125,13 +125,10 @@ export default async function Dashboard({
     const inv = stats.invoices.find((i) => i.tenant_id === tenant.id);
     const hasBill = !!inv;
     const isPaid = inv?.payment_status === "paid";
-    const isOverdue = hasBill && !isPaid && (stats.isHistoricalMonth || stats.isPastDueDay);
-    const isUnpaid = hasBill && !isPaid && !isOverdue;
 
-    let status: "paid" | "overdue" | "unpaid" | "no_bill" = "no_bill";
+    let status: "paid" | "unpaid" | "no_bill" = "no_bill";
     if (isPaid) status = "paid";
-    else if (isOverdue) status = "overdue";
-    else if (isUnpaid) status = "unpaid";
+    else if (hasBill) status = "unpaid";
 
     return {
       tenant,
@@ -145,12 +142,12 @@ export default async function Dashboard({
   // Filtered room cards
   const filteredRooms = roomCards.filter((room) => {
     if (filter === "paid") return room.status === "paid";
-    if (filter === "unpaid") return room.status === "unpaid" || room.status === "overdue";
+    if (filter === "unpaid") return room.status === "unpaid";
     if (filter === "no_bill") return room.status === "no_bill";
     return true;
   });
 
-  const unpaidCount = roomCards.filter((r) => r.status === "unpaid" || r.status === "overdue").length;
+  const unpaidCount = roomCards.filter((r) => r.status === "unpaid").length;
   const paidCount = roomCards.filter((r) => r.status === "paid").length;
   const noBillCount = roomCards.filter((r) => r.status === "no_bill").length;
 
@@ -219,7 +216,7 @@ export default async function Dashboard({
               </div>
               <div>
                 <p className="text-xs font-bold text-rose-900 dark:text-rose-200">
-                  {stats.billsOverdue} bill{stats.billsOverdue > 1 ? "s are" : " is"} overdue for collection
+                  {stats.billsOverdue} bill{stats.billsOverdue > 1 ? "s are" : " is"} unpaid for collection
                 </p>
                 <p className="text-xs text-rose-700 dark:text-rose-400">
                   Rent grace period has passed for {nepaliMonthLabel}. Follow up with pending tenants.
@@ -230,7 +227,7 @@ export default async function Dashboard({
               href={`/?month=${month}&filter=unpaid`}
               className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl transition-colors shrink-0"
             >
-              View Overdue <ArrowRight size={13} />
+              View Unpaid <ArrowRight size={13} />
             </Link>
           </div>
         ) : null}
@@ -436,10 +433,6 @@ export default async function Dashboard({
                         {status === "paid" ? (
                           <span className="inline-flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 text-[11px] font-bold px-2 py-0.5 rounded-full">
                             <CheckCircle2 size={11} /> Paid
-                          </span>
-                        ) : status === "overdue" ? (
-                          <span className="inline-flex items-center gap-1 bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800 text-[11px] font-bold px-2 py-0.5 rounded-full">
-                            <AlertCircle size={11} /> Overdue
                           </span>
                         ) : status === "unpaid" ? (
                           <span className="inline-flex items-center gap-1 bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 text-[11px] font-bold px-2 py-0.5 rounded-full">

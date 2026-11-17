@@ -68,7 +68,7 @@ export function generateReminderText(
   if (variant === "urgent") {
     return `⚠️ *URGENT RENT DUE NOTICE*
 Namaste ${name},
-Your rent and utilities bill for *${nepaliMonth} (Room ${data.roomNo})* is currently overdue.
+Your rent and utilities bill for *${nepaliMonth} (Room ${data.roomNo})* is currently unpaid.
 
 *Total Pending Amount: Rs. ${total}*
 
