@@ -529,11 +529,20 @@ export default function ReminderModal({
                 type="button"
                 disabled={isGenerating || isSending || !hasPhone}
                 onClick={handleShareNative}
-                className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 text-emerald-800 dark:text-emerald-200 text-xs font-bold transition-colors cursor-pointer"
-                title="Share bill card image file and text via system menu"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-500/20 transition-all cursor-pointer disabled:opacity-50"
+                title="Send bill image + scannable QR code directly via WhatsApp / Share sheet"
               >
-                <Share2 size={14} />
-                Share Image
+                {isGenerating ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    Preparing…
+                  </>
+                ) : (
+                  <>
+                    <Share2 size={14} />
+                    Send with QR Image
+                  </>
+                )}
               </button>
             )}
 
@@ -541,7 +550,12 @@ export default function ReminderModal({
               type="button"
               disabled={isSending || sentSuccess || !hasPhone}
               onClick={handleOpenWhatsAppDirect}
-              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#25D366] hover:bg-[#20ba59] disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-emerald-500/20 transition-all cursor-pointer"
+              className={`inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer disabled:opacity-50 ${
+                isMobile
+                  ? "bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 text-emerald-800 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-700"
+                  : "bg-[#25D366] hover:bg-[#20ba59] text-white shadow-md shadow-emerald-500/20"
+              }`}
+              title="Open WhatsApp chat directly with statement & QR link"
             >
               {isSending ? (
                 <>
@@ -556,7 +570,7 @@ export default function ReminderModal({
               ) : (
                 <>
                   <MessageSquare size={14} />
-                  Open in WhatsApp
+                  {isMobile ? "WhatsApp Direct (Chat)" : "Open in WhatsApp"}
                 </>
               )}
             </button>

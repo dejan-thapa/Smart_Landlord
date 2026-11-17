@@ -153,6 +153,11 @@ export function buildWhatsAppBillMessage(data: InvoiceReminderData): string {
     breakdownSection = `📋 *Bill Breakdown:*\n${breakdownLines.join("\n")}\n\n`;
   }
 
+  const appUrl =
+    (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_APP_URL) ||
+    "https://smart-landlord-os.vercel.app";
+  const payUrl = `${appUrl}/pay?room=${encodeURIComponent(data.roomNo)}&amount=${encodeURIComponent(String(data.totalDue))}&month=${encodeURIComponent(nepaliMonth)}`;
+
   return `${greeting}\n` +
     `Here is your rent bill statement for *${nepaliMonth}* (*Room ${data.roomNo}*):\n\n` +
     breakdownSection +
@@ -160,6 +165,8 @@ export function buildWhatsAppBillMessage(data: InvoiceReminderData): string {
     `📱 *Payment Details (${bankName}):*\n` +
     `• Account Name: *${accountHolder}*\n` +
     `• eSewa ID / Number: *${accountNo}*\n\n` +
+    `📲 *Scan to Pay (eSewa QR Code):*\n` +
+    `${payUrl}\n\n` +
     `Please reply with the payment confirmation screenshot once transferred. Thank you! 🙏`;
 }
 
