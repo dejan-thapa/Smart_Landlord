@@ -65,24 +65,24 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
   const sideOther = sortInvoicesByRoomAsc(displayInvoices.filter((inv) => normalizeSide(inv.tenants?.room_side) === "Other"));
 
   return (
-    <main className="max-w-4xl mx-auto p-4 md:p-6 pb-12">
+    <div className="max-w-4xl mx-auto p-4 md:p-6 pb-12">
       {/* Header */}
-      <header className="flex items-center justify-between mb-8 pt-4 gap-3">
-        <div className="flex items-center gap-4">
+      <header className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 sm:mb-8 pt-2 sm:pt-4 gap-3">
+        <div className="flex items-center gap-3 sm:gap-4">
           <Link
             href="/"
             aria-label="Back to Dashboard"
-            className="h-10 w-10 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-600 hover:bg-slate-50 transition-colors"
+            className="h-10 w-10 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-600 hover:bg-slate-50 transition-colors shrink-0"
           >
             <ArrowLeft size={20} />
           </Link>
-          <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2 text-slate-900">
-              <FileText size={20} aria-hidden="true" className="text-teal-600" />
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2 text-slate-900">
+              <FileText size={20} aria-hidden="true" className="text-teal-600 shrink-0" />
               Bills
             </h1>
-            <div className="flex items-center gap-2">
-              <p className="text-slate-500 font-medium text-sm">{monthLabel}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-slate-500 font-medium text-xs sm:text-sm">{monthLabel}</p>
               {isHistorical && (
                 <span className="text-xs font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full uppercase tracking-wider border border-amber-200">
                   History
@@ -92,25 +92,25 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between sm:justify-end gap-2 w-full sm:w-auto">
           <MonthSelector currentMonth={month} basePath="/invoices" extraParams={{ filter }} />
           <BulkEmailButton unpaidCount={unpaidWithEmail.length} month={month} />
         </div>
       </header>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-3 gap-3 mb-6">
-        <div className="bg-white border border-slate-200 shadow-sm rounded-2xl p-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3 mb-6">
+        <div className="col-span-2 sm:col-span-1 bg-white border border-slate-200 shadow-sm rounded-2xl p-3.5 sm:p-4">
           <p className="text-xs text-slate-400 uppercase font-bold tracking-wider mb-1">Total</p>
-          <p className="text-lg font-bold text-slate-900 font-mono">Rs.{totalDue.toLocaleString()}</p>
+          <p className="text-lg font-bold text-slate-900 font-mono truncate">Rs.{totalDue.toLocaleString()}</p>
         </div>
-        <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4">
+        <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3.5 sm:p-4">
           <p className="text-xs text-emerald-600 uppercase font-bold tracking-wider mb-1">Collected</p>
-          <p className="text-lg font-bold text-emerald-700 font-mono">Rs.{totalPaid.toLocaleString()}</p>
+          <p className="text-base sm:text-lg font-bold text-emerald-700 font-mono truncate">Rs.{totalPaid.toLocaleString()}</p>
         </div>
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3.5 sm:p-4">
           <p className="text-xs text-amber-600 uppercase font-bold tracking-wider mb-1">Unpaid</p>
-          <p className="text-lg font-bold text-amber-700">{unpaidCount} rooms</p>
+          <p className="text-base sm:text-lg font-bold text-amber-700 truncate">{unpaidCount} rooms</p>
         </div>
       </div>
 
@@ -176,6 +176,6 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
           )}
         </div>
       )}
-    </main>
+    </div>
   );
 }

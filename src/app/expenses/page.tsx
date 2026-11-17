@@ -46,19 +46,19 @@ function ExpensesContent() {
   }, {});
 
   return (
-    <main className="max-w-5xl mx-auto p-4 md:p-6 pb-20">
+    <div className="max-w-5xl mx-auto p-4 md:p-6 pb-20">
       {/* Mini Header */}
-      <header className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-4">
+      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+        <div className="flex items-center gap-3 sm:gap-4">
           <Link
             href={`/?month=${currentMonth}`}
             aria-label="Back to Dashboard"
-            className="h-9 w-9 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-600 hover:bg-slate-50 transition-colors"
+            className="h-9 w-9 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-600 hover:bg-slate-50 transition-colors shrink-0"
           >
             <ArrowLeft size={18} />
           </Link>
-          <div className="flex items-center gap-3">
-             <Wallet size={20} aria-hidden="true" className="text-teal-600" />
+          <div className="flex items-center gap-2.5 sm:gap-3">
+             <Wallet size={20} aria-hidden="true" className="text-teal-600 shrink-0" />
              <h1 className="text-xl font-black text-slate-900 tracking-tighter uppercase">Ledger</h1>
           </div>
         </div>
@@ -70,21 +70,21 @@ function ExpensesContent() {
       </header>
 
       {/* High Density Stats */}
-      <div className="flex items-stretch gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row items-stretch gap-3 sm:gap-4 mb-6">
         <div className="flex-1 bg-slate-900 rounded-3xl p-5 text-white flex items-center justify-between shadow-xl shadow-slate-200">
            <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-50 mb-1">Total Monthly Spend</p>
-              <p className="text-3xl font-black font-mono">Rs.{totalExpenses.toLocaleString()}</p>
+              <p className="text-2xl sm:text-3xl font-black font-mono">Rs.{totalExpenses.toLocaleString()}</p>
            </div>
-           <Calculator className="opacity-20" size={40} />
+           <Calculator className="opacity-20 shrink-0" size={36} />
         </div>
 
-        <div className="flex-[1.5] bg-white border border-slate-100 rounded-3xl p-5 flex flex-col justify-center">
+        <div className="flex-[1.5] bg-white border border-slate-100 rounded-3xl p-4 sm:p-5 flex flex-col justify-center">
            <div className="flex items-center gap-2 mb-2">
               <TrendingDown size={14} className="text-rose-500" />
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Main Categories</p>
            </div>
-           <div className="flex gap-2">
+           <div className="flex flex-wrap gap-2">
               {Object.entries(categoryTotals).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([cat, amt]) => (
                 <div key={cat} className="bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100">
                   <span className="text-[9px] font-bold text-slate-400 uppercase mr-2">{cat}</span>
@@ -97,7 +97,7 @@ function ExpensesContent() {
       </div>
 
       <div className="mb-4 bg-blue-50/50 border border-blue-100 text-blue-600 px-4 py-2 rounded-xl flex items-center gap-2 text-[11px] font-medium">
-        <Info size={14} />
+        <Info size={14} className="shrink-0" />
         <span>Type directly into any row and press <kbd className="bg-blue-100 px-1 rounded font-bold">Enter</kbd> to save. All 30 days are visible below.</span>
       </div>
 
@@ -108,7 +108,7 @@ function ExpensesContent() {
       ) : (
         <MonthlyLedger expenses={expenses} month={currentMonth} refresh={loadData} />
       )}
-    </main>
+    </div>
   );
 }
 

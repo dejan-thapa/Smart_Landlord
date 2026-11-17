@@ -144,12 +144,12 @@ function MeterInputContent() {
           >
             <ArrowLeft size={20} />
           </Link>
-          <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2 text-slate-900 dark:text-white">
-              <Zap size={20} aria-hidden="true" className="text-teal-600" />
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2 text-slate-900 dark:text-white">
+              <Zap size={20} aria-hidden="true" className="text-teal-600 shrink-0" />
               Monthly Meter Readings
             </h1>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 mt-0.5">
               <p className="text-slate-500 dark:text-slate-400 font-medium text-sm">{monthLabel}</p>
               <span className="text-xs font-bold bg-teal-50 dark:bg-teal-950/50 text-teal-700 dark:text-teal-400 border border-teal-200 dark:border-teal-800 px-2 py-0.5 rounded-full uppercase tracking-wider">
                 Current Billing Cycle
