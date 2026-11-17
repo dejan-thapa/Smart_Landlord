@@ -60,21 +60,39 @@ function normalizePhoneNumber(rawPhone) {
   return cleaned;
 }
 
-// Restore all session files from Supabase if local auth is empty
+// Restore all session files from Supabase (paginated beyond PostgREST 1000-row limit)
 async function restoreSessionFromSupabase() {
   if (!supabase) return;
   try {
-    const { data, error } = await supabase.from("whatsapp_sessions").select("id, data");
-    if (error || !data || data.length === 0) return;
+    const pageSize = 1000;
+    let from = 0;
+    let totalRestored = 0;
 
     await fsPromises.mkdir(AUTH_DIR, { recursive: true });
-    for (const row of data) {
-      const safeName = path.basename(row.id);
-      if (!safeName) continue;
-      const filePath = path.join(AUTH_DIR, safeName);
-      await fsPromises.writeFile(filePath, row.data, "utf8");
+
+    while (true) {
+      const { data, error } = await supabase
+        .from("whatsapp_sessions")
+        .select("id, data")
+        .order("id", { ascending: true })
+        .range(from, from + pageSize - 1);
+
+      if (error || !data || data.length === 0) break;
+
+      for (const row of data) {
+        const safeName = path.basename(row.id);
+        if (!safeName) continue;
+        await fsPromises.writeFile(path.join(AUTH_DIR, safeName), row.data, "utf8");
+        totalRestored += 1;
+      }
+
+      if (data.length < pageSize) break;
+      from += pageSize;
     }
-    console.log(`[WhatsApp Bot] Restored ${data.length} session files from Supabase.`);
+
+    if (totalRestored > 0) {
+      console.log(`[WhatsApp Bot] Restored ${totalRestored} session files from Supabase.`);
+    }
   } catch (err) {
     console.warn("[WhatsApp Bot] Could not restore session from Supabase:", err.message);
   }
@@ -82,7 +100,7 @@ async function restoreSessionFromSupabase() {
 
 let syncTimer = null;
 
-// Sync all auth files (creds.json + Signal encryption keys) to Supabase
+// Sync all auth files (creds.json + Signal encryption keys) to Supabase in chunks
 async function syncAllSessionFilesToSupabase() {
   if (!supabase) return;
   try {
@@ -100,8 +118,10 @@ async function syncAllSessionFilesToSupabase() {
       } catch {}
     }
 
-    if (rows.length > 0) {
-      const { error } = await supabase.from("whatsapp_sessions").upsert(rows);
+    const chunkSize = 500;
+    for (let i = 0; i < rows.length; i += chunkSize) {
+      const chunk = rows.slice(i, i + chunkSize);
+      const { error } = await supabase.from("whatsapp_sessions").upsert(chunk);
       if (error) {
         console.warn("[WhatsApp Bot] Supabase session sync warning:", error.message);
       }
