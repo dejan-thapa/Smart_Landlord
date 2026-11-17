@@ -10,20 +10,15 @@ import {
   Search,
   Download,
   Printer,
-  Calendar,
   Wallet,
-  ArrowUpRight,
   RotateCcw,
   ExternalLink,
-  ChevronRight,
-  Filter,
   Check,
   Building2,
   FileText,
   Loader2,
   X,
   Banknote,
-  AlertCircle,
   MessageSquare,
 } from "lucide-react";
 import NepaliDate from "nepali-date-converter";
@@ -32,7 +27,67 @@ import ReceiptModal from "./ReceiptModal";
 import ReminderModal from "@/components/ReminderModal";
 import { InvoiceReminderData } from "@/lib/reminder-utils";
 import { sendBillViaWhatsApp } from "@/lib/bill-image";
+import { getInvoicePreviousBalance } from "@/lib/types";
 import { PaymentRecord, recordPaymentAction, revertPaymentAction } from "./actions";
+
+function formatNepaliMonthLabel(billingMonth: string): string {
+  try {
+    return new NepaliDate(new Date(billingMonth + "-15")).format("MMMM YYYY");
+  } catch {
+    return billingMonth;
+  }
+}
+
+function formatNepaliDate(dateStr: string): string {
+  if (!dateStr) return "";
+  try {
+    return new NepaliDate(new Date(dateStr)).format("YYYY-MM-DD");
+  } catch {
+    return "";
+  }
+}
+
+function compareRoomAsc(a: PaymentRecord, b: PaymentRecord): number {
+  const roomA = a.tenants?.room_no || "";
+  const roomB = b.tenants?.room_no || "";
+  const numA = parseInt((roomA.match(/\d+/) || [""])[0], 10);
+  const numB = parseInt((roomB.match(/\d+/) || [""])[0], 10);
+  if (!isNaN(numA) && !isNaN(numB) && numA !== numB) return numA - numB;
+  const sideA = a.tenants?.room_side || "";
+  const sideB = b.tenants?.room_side || "";
+  return (
+    roomA.localeCompare(roomB, undefined, { numeric: true, sensitivity: "base" }) ||
+    sideA.localeCompare(sideB)
+  );
+}
+
+function PaymentMethodBadge({ method }: { method: PaymentRecord["payment_method"] }) {
+  const badgeClass =
+    method === "esewa"
+      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+      : method === "bank_transfer"
+      ? "bg-blue-50 text-blue-700 border-blue-200"
+      : method === "cash"
+      ? "bg-green-50 text-green-700 border-green-200"
+      : method === "cheque"
+      ? "bg-purple-50 text-purple-700 border-purple-200"
+      : "bg-slate-100 text-slate-700 border-slate-200";
+
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border whitespace-nowrap ${badgeClass}`}>
+      {method === "esewa" ? (
+        <CreditCard size={12} />
+      ) : method === "cash" ? (
+        <Banknote size={12} />
+      ) : method === "bank_transfer" ? (
+        <Building2 size={12} />
+      ) : (
+        <Wallet size={12} />
+      )}
+      {method ? method.replace("_", " ").toUpperCase() : "CASH"}
+    </span>
+  );
+}
 
 interface PaymentsViewProps {
   initialPayments: PaymentRecord[];
@@ -63,26 +118,15 @@ export default function PaymentsView({ initialPayments, month }: PaymentsViewPro
   const [sendingWaId, setSendingWaId] = useState<string | null>(null);
   const [sentWaId, setSentWaId] = useState<string | null>(null);
 
-  const monthLabel = (() => {
-    if (month === "all") return "All Time";
-    try {
-      return new NepaliDate(new Date(month + "-15")).format("MMMM YYYY");
-    } catch {
-      return month;
-    }
-  })();
+  const monthLabel = month === "all" ? "All Time" : formatNepaliMonthLabel(month);
 
-  // Filtered payments
+  // Filtered & sorted payments (unpaid sorted serially by room number)
   const filteredPayments = useMemo(() => {
-    return initialPayments.filter((p) => {
-      // Status filter
+    const filtered = initialPayments.filter((p) => {
       if (statusTab === "paid" && p.payment_status !== "paid") return false;
       if (statusTab === "unpaid" && p.payment_status !== "unpaid") return false;
-
-      // Method filter
       if (methodFilter !== "all" && p.payment_method !== methodFilter) return false;
 
-      // Search filter
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
         const tenantName = p.tenants?.name?.toLowerCase() || "";
@@ -99,6 +143,11 @@ export default function PaymentsView({ initialPayments, month }: PaymentsViewPro
 
       return true;
     });
+
+    if (statusTab === "unpaid") {
+      return [...filtered].sort(compareRoomAsc);
+    }
+    return filtered;
   }, [initialPayments, statusTab, methodFilter, searchQuery]);
 
   // Statistics
@@ -211,10 +260,60 @@ export default function PaymentsView({ initialPayments, month }: PaymentsViewPro
     }
   };
 
+  const openRecordModal = (payment: PaymentRecord) => {
+    setRecordingInvoice(payment);
+    setPaymentDate(new Date().toISOString().slice(0, 10));
+    setPaymentMethod("cash");
+    setPaymentNotes("");
+  };
+
+  const handleSendWhatsApp = async (payment: PaymentRecord) => {
+    const rentAmount = Number(payment.rent_amount || 0);
+    const electricityCost = Number(payment.electricity_cost || 0);
+    const waterShare = Number(payment.water_share || payment.waste_water_cost || 0);
+    const wifiShare = Number(payment.wifi_share || 0);
+    const garbageShare = Number(payment.garbage_share || 0);
+    const payload: InvoiceReminderData = {
+      tenantName: payment.tenants?.name || "",
+      roomNo: payment.tenants?.room_no || "",
+      roomSide: payment.tenants?.room_side || "",
+      phoneNumber: payment.tenants?.phone_number || "",
+      billingMonth: payment.billing_month,
+      totalDue: Number(payment.total_due),
+      rentAmount,
+      electricityCost,
+      waterShare,
+      wifiShare,
+      garbageShare,
+      previousBalance: getInvoicePreviousBalance({
+        total_due: Number(payment.total_due || 0),
+        rent_amount: rentAmount,
+        electricity_cost: electricityCost,
+        water_share: waterShare,
+        wifi_share: wifiShare,
+        garbage_share: garbageShare,
+      }),
+    };
+    setSendingWaId(payment.id);
+    try {
+      const res = await sendBillViaWhatsApp(payload);
+      if (res.sent) {
+        setSentWaId(payment.id);
+        setTimeout(() => setSentWaId((curr) => (curr === payment.id ? null : curr)), 3000);
+      } else if (res.needsModal) {
+        setSelectedReminder(payload);
+      } else {
+        alert("Failed to send WhatsApp: " + (res.error || "Unknown error"));
+      }
+    } finally {
+      setSendingWaId(null);
+    }
+  };
+
   return (
-    <main className="max-w-6xl mx-auto p-4 md:p-6 pb-20">
+    <div className="max-w-6xl mx-auto p-4 md:p-6 pb-20">
       {/* Header Bar */}
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 pt-2">
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-4 mb-5 md:mb-8 pt-1 md:pt-2">
         <div>
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-md shadow-blue-500/20">
@@ -337,33 +436,39 @@ export default function PaymentsView({ initialPayments, month }: PaymentsViewPro
         </div>
       </div>
 
-      {/* Method Summary Bar */}
-      <div className="bg-slate-900 text-white rounded-2xl p-4 mb-6 shadow-sm flex flex-wrap items-center justify-between gap-4">
+      {/* Method Summary Bar (compact grid on mobile, inline flex on desktop) */}
+      <div className="bg-slate-900 text-white rounded-2xl p-3 md:p-4 mb-4 md:mb-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-2.5 md:gap-4">
         <div className="flex items-center gap-2">
-          <Wallet size={16} className="text-blue-400" />
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
-            Payment Method Split:
+          <Wallet size={15} className="text-blue-400 shrink-0" />
+          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">
+            Payment Method Split
           </span>
         </div>
-        <div className="flex flex-wrap items-center gap-3 text-xs">
-          <div className="flex items-center gap-1.5 bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-700">
-            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-            <span className="text-slate-300 font-medium">eSewa:</span>
-            <span className="font-bold font-mono">Rs. {(stats.byMethod.esewa || 0).toLocaleString()}</span>
+        <div className="grid grid-cols-3 md:flex md:flex-wrap items-center gap-2 md:gap-3 text-xs">
+          <div className="flex flex-col md:flex-row md:items-center gap-0.5 md:gap-1.5 bg-slate-800/80 px-2.5 py-1.5 rounded-xl border border-slate-700/80">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
+              <span className="text-slate-300 font-medium text-[11px]">eSewa</span>
+            </div>
+            <span className="font-bold font-mono text-xs">Rs. {(stats.byMethod.esewa || 0).toLocaleString()}</span>
           </div>
-          <div className="flex items-center gap-1.5 bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-700">
-            <span className="w-2 h-2 rounded-full bg-green-400"></span>
-            <span className="text-slate-300 font-medium">Cash:</span>
-            <span className="font-bold font-mono">Rs. {(stats.byMethod.cash || 0).toLocaleString()}</span>
+          <div className="flex flex-col md:flex-row md:items-center gap-0.5 md:gap-1.5 bg-slate-800/80 px-2.5 py-1.5 rounded-xl border border-slate-700/80">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-green-400 shrink-0"></span>
+              <span className="text-slate-300 font-medium text-[11px]">Cash</span>
+            </div>
+            <span className="font-bold font-mono text-xs">Rs. {(stats.byMethod.cash || 0).toLocaleString()}</span>
           </div>
-          <div className="flex items-center gap-1.5 bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-700">
-            <span className="w-2 h-2 rounded-full bg-blue-400"></span>
-            <span className="text-slate-300 font-medium">Bank Transfer:</span>
-            <span className="font-bold font-mono">Rs. {(stats.byMethod.bank_transfer || 0).toLocaleString()}</span>
+          <div className="flex flex-col md:flex-row md:items-center gap-0.5 md:gap-1.5 bg-slate-800/80 px-2.5 py-1.5 rounded-xl border border-slate-700/80">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-blue-400 shrink-0"></span>
+              <span className="text-slate-300 font-medium text-[11px]">Bank</span>
+            </div>
+            <span className="font-bold font-mono text-xs">Rs. {(stats.byMethod.bank_transfer || 0).toLocaleString()}</span>
           </div>
           {(stats.byMethod.cheque || 0) > 0 && (
-            <div className="flex items-center gap-1.5 bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-700">
-              <span className="w-2 h-2 rounded-full bg-purple-400"></span>
+            <div className="flex items-center gap-1.5 bg-slate-800/80 px-2.5 py-1.5 rounded-xl border border-slate-700/80 col-span-3 md:col-span-1">
+              <span className="w-2 h-2 rounded-full bg-purple-400 shrink-0"></span>
               <span className="text-slate-300 font-medium">Cheque:</span>
               <span className="font-bold font-mono">Rs. {(stats.byMethod.cheque || 0).toLocaleString()}</span>
             </div>
@@ -372,43 +477,46 @@ export default function PaymentsView({ initialPayments, month }: PaymentsViewPro
       </div>
 
       {/* Control Filter Bar */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 mb-6 shadow-xs flex flex-col md:flex-row items-center justify-between gap-4">
+      <div className="bg-white border border-slate-200 rounded-2xl p-3.5 md:p-4 mb-4 md:mb-6 shadow-xs flex flex-col md:flex-row items-center justify-between gap-3 md:gap-4">
         {/* Status Tabs */}
         <div className="flex items-center bg-slate-100 p-1 rounded-xl w-full md:w-auto">
           <button
+            type="button"
             onClick={() => setStatusTab("paid")}
-            className={`flex-1 md:flex-initial px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            className={`flex-1 md:flex-initial px-3 md:px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               statusTab === "paid"
                 ? "bg-white text-slate-900 shadow-xs"
                 : "text-slate-500 hover:text-slate-800"
             }`}
           >
-            Paid Ledger ({initialPayments.filter((p) => p.payment_status === "paid").length})
+            Paid ({initialPayments.filter((p) => p.payment_status === "paid").length})
           </button>
           <button
+            type="button"
             onClick={() => setStatusTab("unpaid")}
-            className={`flex-1 md:flex-initial px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            className={`flex-1 md:flex-initial px-3 md:px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               statusTab === "unpaid"
                 ? "bg-white text-amber-700 shadow-xs"
                 : "text-slate-500 hover:text-slate-800"
             }`}
           >
-            Unpaid / Pending ({initialPayments.filter((p) => p.payment_status === "unpaid").length})
+            Unpaid ({initialPayments.filter((p) => p.payment_status === "unpaid").length})
           </button>
           <button
+            type="button"
             onClick={() => setStatusTab("all")}
-            className={`flex-1 md:flex-initial px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            className={`flex-1 md:flex-initial px-3 md:px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               statusTab === "all"
                 ? "bg-white text-slate-900 shadow-xs"
                 : "text-slate-500 hover:text-slate-800"
             }`}
           >
-            All Records ({initialPayments.length})
+            All ({initialPayments.length})
           </button>
         </div>
 
         {/* Search & Method Pill Filters */}
-        <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+        <div className="flex flex-col sm:flex-row items-center gap-2.5 sm:gap-3 w-full md:w-auto">
           {/* Search Input */}
           <div className="relative w-full sm:w-60">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -417,10 +525,12 @@ export default function PaymentsView({ initialPayments, month }: PaymentsViewPro
               placeholder="Search tenant, room, notes..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+              className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
             />
             {searchQuery && (
               <button
+                type="button"
+                aria-label="Clear search"
                 onClick={() => setSearchQuery("")}
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
               >
@@ -433,7 +543,8 @@ export default function PaymentsView({ initialPayments, month }: PaymentsViewPro
           <select
             value={methodFilter}
             onChange={(e) => setMethodFilter(e.target.value)}
-            className="w-full sm:w-auto text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-slate-700 font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500/20"
+            aria-label="Filter by payment method"
+            className="w-full sm:w-auto text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500/20"
           >
             <option value="all">All Methods</option>
             <option value="esewa">eSewa</option>
@@ -445,7 +556,7 @@ export default function PaymentsView({ initialPayments, month }: PaymentsViewPro
         </div>
       </div>
 
-      {/* Ledger Table / List */}
+      {/* Ledger Cards (Mobile) & Table (Desktop) */}
       <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-xs">
         {filteredPayments.length === 0 ? (
           <div className="text-center py-16 px-4">
@@ -460,260 +571,326 @@ export default function PaymentsView({ initialPayments, month }: PaymentsViewPro
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50/75 text-[11px] font-black uppercase tracking-wider text-slate-500">
-                  <th className="py-3.5 px-4 md:px-6">Date Paid</th>
-                  <th className="py-3.5 px-4">Tenant / Room</th>
-                  <th className="py-3.5 px-4">Billing Month</th>
-                  <th className="py-3.5 px-4">Method</th>
-                  <th className="py-3.5 px-4 text-right">Amount (NPR)</th>
-                  <th className="py-3.5 px-4">Notes</th>
-                  <th className="py-3.5 px-4 md:px-6 text-center">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-xs">
-                {filteredPayments.map((payment) => {
-                  const isPaid = payment.payment_status === "paid";
-                  const tenant = payment.tenants;
-                  const dateStr = payment.payment_date || (payment.updated_at ? payment.updated_at.slice(0, 10) : "");
-                  
-                  const nepaliDateStr = (() => {
-                    if (!dateStr) return "";
-                    try {
-                      return new NepaliDate(new Date(dateStr)).format("YYYY-MM-DD");
-                    } catch {
-                      return "";
-                    }
-                  })();
+          <>
+            {/* Mobile Card List (avoids horizontal cutoff & squished columns) */}
+            <div className="md:hidden divide-y divide-slate-100">
+              {filteredPayments.map((payment) => {
+                const isPaid = payment.payment_status === "paid";
+                const tenant = payment.tenants;
+                const dateStr = payment.payment_date || (payment.updated_at ? payment.updated_at.slice(0, 10) : "");
+                const billingLabel = formatNepaliMonthLabel(payment.billing_month);
 
-                  const billingLabel = (() => {
-                    try {
-                      return new NepaliDate(new Date(payment.billing_month + "-15")).format("MMMM YYYY");
-                    } catch {
-                      return payment.billing_month;
-                    }
-                  })();
-
-                  return (
-                    <tr
-                      key={payment.id}
-                      className="hover:bg-slate-50/80 transition-colors group"
-                    >
-                      {/* Date Paid */}
-                      <td className="py-4 px-4 md:px-6 font-medium text-slate-900 whitespace-nowrap">
-                        {isPaid ? (
-                          <div>
-                            <span className="font-semibold text-slate-900">{dateStr || "Recorded"}</span>
-                            {nepaliDateStr && (
-                              <p className="text-[10px] text-slate-400 font-mono">BS: {nepaliDateStr}</p>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                            <Clock size={10} /> Pending
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Tenant / Room */}
-                      <td className="py-4 px-4">
-                        <div className="font-bold text-slate-900">
+                return (
+                  <div key={payment.id} className="p-4 space-y-3">
+                    {/* Top row: Tenant & Room on left, Amount prominently on right */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-bold text-sm text-slate-900 truncate">
                           {tenant?.name || "Tenant"}
-                        </div>
-                        <div className="text-[11px] text-slate-500 flex items-center gap-1">
-                          <span className="inline-block px-1.5 py-0.2 bg-slate-100 rounded text-slate-700 font-mono font-medium">
-                            Room {tenant?.room_no || "N/A"}{tenant?.room_side ? ` (${tenant.room_side})` : ""}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                          <span className="inline-block px-2 py-0.5 bg-slate-100 rounded-md text-slate-700 font-mono font-semibold text-xs whitespace-nowrap">
+                            Room {tenant?.room_no || "N/A"}{tenant?.room_side ? ` · ${tenant.room_side}` : ""}
                           </span>
-                        </div>
-                      </td>
-
-                      {/* Billing Month */}
-                      <td className="py-4 px-4 whitespace-nowrap">
-                        <span className="text-slate-800 font-medium">{billingLabel}</span>
-                        <p className="text-[10px] text-slate-400 font-mono">{payment.billing_month}</p>
-                      </td>
-
-                      {/* Payment Method Badge */}
-                      <td className="py-4 px-4 whitespace-nowrap">
-                        {isPaid ? (
-                          <span
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border ${
-                              payment.payment_method === "esewa"
-                                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                : payment.payment_method === "bank_transfer"
-                                ? "bg-blue-50 text-blue-700 border-blue-200"
-                                : payment.payment_method === "cash"
-                                ? "bg-green-50 text-green-700 border-green-200"
-                                : payment.payment_method === "cheque"
-                                ? "bg-purple-50 text-purple-700 border-purple-200"
-                                : "bg-slate-100 text-slate-700 border-slate-200"
-                            }`}
-                          >
-                            {payment.payment_method === "esewa" ? (
-                              <CreditCard size={12} />
-                            ) : payment.payment_method === "cash" ? (
-                              <Banknote size={12} />
-                            ) : payment.payment_method === "bank_transfer" ? (
-                              <Building2 size={12} />
-                            ) : (
-                              <Wallet size={12} />
-                            )}
-                            {payment.payment_method
-                              ? payment.payment_method.replace("_", " ").toUpperCase()
-                              : "CASH"}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400 text-xs italic">—</span>
-                        )}
-                      </td>
-
-                      {/* Total Due / Paid */}
-                      <td className="py-4 px-4 text-right whitespace-nowrap">
-                        <span className="font-black font-mono text-sm text-slate-900">
-                          Rs. {Number(payment.total_due).toLocaleString()}
-                        </span>
-                      </td>
-
-                      {/* Notes / Reference */}
-                      <td className="py-4 px-4 max-w-[200px]">
-                        {payment.payment_notes ? (
-                          <span className="text-slate-600 text-xs truncate block" title={payment.payment_notes}>
-                            {payment.payment_notes}
-                          </span>
-                        ) : (
-                          <span className="text-slate-300 text-xs">—</span>
-                        )}
-                      </td>
-
-                      {/* Actions */}
-                      <td className="py-4 px-4 md:px-6 text-center whitespace-nowrap">
-                        <div className="flex items-center justify-center gap-1.5">
                           {isPaid ? (
-                            <>
-                              {/* Print Receipt */}
-                              <button
-                                onClick={() => setSelectedReceipt(payment)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
-                                title="View & Print Official Receipt"
-                              >
-                                <Printer size={13} />
-                                Receipt
-                              </button>
-
-                              {/* View Invoice */}
-                              <Link
-                                href={`/invoices/${payment.id}`}
-                                aria-label={`Open full bill for Room ${payment.tenants?.room_no}`}
-                                className="p-2 rounded-lg text-slate-400 hover:text-teal-600 hover:bg-teal-50 transition-colors"
-                                title="Open full bill"
-                              >
-                                <ExternalLink size={14} />
-                              </Link>
-
-                              {/* Revert to unpaid */}
-                              <button
-                                type="button"
-                                aria-label={`Revert payment for Room ${payment.tenants?.room_no} to unpaid`}
-                                onClick={() => handleRevert(payment.id)}
-                                disabled={revertingId === payment.id}
-                                className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                                title="Revert to Unpaid"
-                              >
-                                {revertingId === payment.id ? (
-                                  <Loader2 size={14} className="animate-spin text-rose-500" />
-                                ) : (
-                                  <RotateCcw size={14} />
-                                )}
-                              </button>
-                            </>
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
+                              <CheckCircle2 size={11} /> Paid
+                            </span>
                           ) : (
-                            <>
-                              {/* Quick Record Button */}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setRecordingInvoice(payment);
-                                  setPaymentDate(new Date().toISOString().slice(0, 10));
-                                  setPaymentMethod("cash");
-                                  setPaymentNotes("");
-                                }}
-                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
-                              >
-                                <Check size={13} aria-hidden="true" />
-                                Record Payment
-                              </button>
-
-                              {/* Send WhatsApp Reminder (1-click auto-send) */}
-                              <button
-                                type="button"
-                                disabled={sendingWaId === payment.id}
-                                aria-label={`Send WhatsApp bill for Room ${payment.tenants?.room_no}`}
-                                onClick={async () => {
-                                  const payload: InvoiceReminderData = {
-                                    tenantName: payment.tenants?.name || "",
-                                    roomNo: payment.tenants?.room_no || "",
-                                    roomSide: payment.tenants?.room_side || "",
-                                    phoneNumber: payment.tenants?.phone_number || "",
-                                    billingMonth: payment.billing_month,
-                                    totalDue: Number(payment.total_due),
-                                    rentAmount: Number(payment.rent_amount || 0),
-                                    electricityCost: Number(payment.electricity_cost || 0),
-                                    waterShare: Number(payment.water_share || payment.waste_water_cost || 0),
-                                    wifiShare: Number(payment.wifi_share || 0),
-                                    garbageShare: Number(payment.garbage_share || 0),
-                                  };
-                                  setSendingWaId(payment.id);
-                                  try {
-                                    const res = await sendBillViaWhatsApp(payload);
-                                    if (res.sent) {
-                                      setSentWaId(payment.id);
-                                      setTimeout(() => setSentWaId((curr) => (curr === payment.id ? null : curr)), 3000);
-                                    } else if (res.needsModal) {
-                                      setSelectedReminder(payload);
-                                    } else {
-                                      alert("Failed to send WhatsApp: " + (res.error || "Unknown error"));
-                                    }
-                                  } finally {
-                                    setSendingWaId(null);
-                                  }
-                                }}
-                                className={`p-2 rounded-lg transition-colors cursor-pointer disabled:opacity-60 ${
-                                  sentWaId === payment.id
-                                    ? "bg-emerald-600 text-white"
-                                    : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                                }`}
-                                title="Send bill & QR on WhatsApp"
-                              >
-                                {sendingWaId === payment.id ? (
-                                  <Loader2 size={14} className="animate-spin" />
-                                ) : sentWaId === payment.id ? (
-                                  <CheckCircle2 size={14} />
-                                ) : (
-                                  <MessageSquare size={14} />
-                                )}
-                              </button>
-
-                              {/* View Invoice */}
-                              <Link
-                                href={`/invoices/${payment.id}`}
-                                aria-label={`Open full bill for Room ${payment.tenants?.room_no}`}
-                                className="p-2 rounded-lg text-slate-400 hover:text-teal-600 hover:bg-teal-50 transition-colors"
-                                title="Open full bill"
-                              >
-                                <ExternalLink size={14} />
-                              </Link>
-                            </>
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200 whitespace-nowrap">
+                              <Clock size={11} /> Unpaid
+                            </span>
                           )}
                         </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="font-black font-mono text-base text-slate-900 whitespace-nowrap">
+                          Rs. {Number(payment.total_due).toLocaleString()}
+                        </p>
+                        <p className="text-xs text-slate-400 font-medium whitespace-nowrap">
+                          {billingLabel}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Paid metadata & notes */}
+                    {(isPaid || payment.payment_notes) && (
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+                        {isPaid && (
+                          <div className="flex items-center gap-2">
+                            <PaymentMethodBadge method={payment.payment_method} />
+                            <span className="font-mono text-slate-600">
+                              {dateStr || "Recorded"}
+                            </span>
+                          </div>
+                        )}
+                        {payment.payment_notes && (
+                          <p className="text-xs text-slate-500 truncate max-w-full">
+                            {payment.payment_notes}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Touch-friendly Action Bar */}
+                    <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                      {isPaid ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedReceipt(payment)}
+                            className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
+                          >
+                            <Printer size={14} />
+                            Receipt
+                          </button>
+                          <Link
+                            href={`/invoices/${payment.id}`}
+                            aria-label={`Open full bill for Room ${payment.tenants?.room_no}`}
+                            className="inline-flex items-center justify-center gap-1 px-3 py-2 rounded-xl border border-slate-200 text-slate-600 hover:text-teal-600 text-xs font-semibold transition-colors"
+                          >
+                            <ExternalLink size={14} />
+                            Bill
+                          </Link>
+                          <button
+                            type="button"
+                            aria-label={`Revert payment for Room ${payment.tenants?.room_no} to unpaid`}
+                            onClick={() => handleRevert(payment.id)}
+                            disabled={revertingId === payment.id}
+                            className="p-2 rounded-xl border border-slate-200 text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                            title="Revert to Unpaid"
+                          >
+                            {revertingId === payment.id ? (
+                              <Loader2 size={14} className="animate-spin text-rose-500" />
+                            ) : (
+                              <RotateCcw size={14} />
+                            )}
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => openRecordModal(payment)}
+                            className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                          >
+                            <Check size={14} aria-hidden="true" />
+                            Record Payment
+                          </button>
+                          <button
+                            type="button"
+                            disabled={sendingWaId === payment.id}
+                            aria-label={`Send WhatsApp bill for Room ${payment.tenants?.room_no}`}
+                            onClick={() => handleSendWhatsApp(payment)}
+                            className={`inline-flex items-center justify-center gap-1 px-3 py-2.5 rounded-xl border text-xs font-bold transition-colors cursor-pointer disabled:opacity-60 ${
+                              sentWaId === payment.id
+                                ? "bg-emerald-600 text-white border-emerald-600"
+                                : "bg-emerald-50 text-emerald-700 border-emerald-200/70 hover:bg-emerald-100"
+                            }`}
+                            title="Send bill & QR on WhatsApp"
+                          >
+                            {sendingWaId === payment.id ? (
+                              <Loader2 size={14} className="animate-spin" />
+                            ) : sentWaId === payment.id ? (
+                              <CheckCircle2 size={14} />
+                            ) : (
+                              <MessageSquare size={14} />
+                            )}
+                          </button>
+                          <Link
+                            href={`/invoices/${payment.id}`}
+                            aria-label={`Open full bill for Room ${payment.tenants?.room_no}`}
+                            className="p-2.5 rounded-xl border border-slate-200 text-slate-500 hover:text-teal-600 transition-colors"
+                            title="Open full bill"
+                          >
+                            <ExternalLink size={14} />
+                          </Link>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop Table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50/80 dark:bg-slate-800/80 text-[11px] font-black uppercase tracking-wider text-slate-500">
+                    <th className="py-3.5 px-4 md:px-6">Status / Date</th>
+                    <th className="py-3.5 px-4">Tenant / Room</th>
+                    <th className="py-3.5 px-4">Billing Month</th>
+                    <th className="py-3.5 px-4">Method</th>
+                    <th className="py-3.5 px-4 text-right">Amount (NPR)</th>
+                    <th className="py-3.5 px-4">Notes</th>
+                    <th className="py-3.5 px-4 md:px-6 text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-xs">
+                  {filteredPayments.map((payment) => {
+                    const isPaid = payment.payment_status === "paid";
+                    const tenant = payment.tenants;
+                    const dateStr = payment.payment_date || (payment.updated_at ? payment.updated_at.slice(0, 10) : "");
+                    const nepaliDateStr = formatNepaliDate(dateStr);
+                    const billingLabel = formatNepaliMonthLabel(payment.billing_month);
+
+                    return (
+                      <tr
+                        key={payment.id}
+                        className="hover:bg-slate-50/80 transition-colors group"
+                      >
+                        {/* Status / Date Paid */}
+                        <td className="py-4 px-4 md:px-6 font-medium text-slate-900 whitespace-nowrap">
+                          {isPaid ? (
+                            <div>
+                              <span className="font-semibold text-slate-900">{dateStr || "Recorded"}</span>
+                              {nepaliDateStr && (
+                                <p className="text-[10px] text-slate-400 font-mono">BS: {nepaliDateStr}</p>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                              <Clock size={11} /> Unpaid
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Tenant / Room */}
+                        <td className="py-4 px-4 whitespace-nowrap">
+                          <div className="font-bold text-slate-900">
+                            {tenant?.name || "Tenant"}
+                          </div>
+                          <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
+                            <span className="inline-block px-1.5 py-0.5 bg-slate-100 rounded text-slate-700 font-mono font-medium whitespace-nowrap">
+                              Room {tenant?.room_no || "N/A"}{tenant?.room_side ? ` (${tenant.room_side})` : ""}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Billing Month */}
+                        <td className="py-4 px-4 whitespace-nowrap">
+                          <span className="text-slate-800 font-medium">{billingLabel}</span>
+                          <p className="text-[10px] text-slate-400 font-mono">{payment.billing_month}</p>
+                        </td>
+
+                        {/* Payment Method Badge */}
+                        <td className="py-4 px-4 whitespace-nowrap">
+                          {isPaid ? (
+                            <PaymentMethodBadge method={payment.payment_method} />
+                          ) : (
+                            <span className="text-slate-400 text-xs italic">—</span>
+                          )}
+                        </td>
+
+                        {/* Total Due / Paid */}
+                        <td className="py-4 px-4 text-right whitespace-nowrap">
+                          <span className="font-black font-mono text-sm text-slate-900">
+                            Rs. {Number(payment.total_due).toLocaleString()}
+                          </span>
+                        </td>
+
+                        {/* Notes / Reference */}
+                        <td className="py-4 px-4 max-w-[200px]">
+                          {payment.payment_notes ? (
+                            <span className="text-slate-600 text-xs truncate block" title={payment.payment_notes}>
+                              {payment.payment_notes}
+                            </span>
+                          ) : (
+                            <span className="text-slate-300 text-xs">—</span>
+                          )}
+                        </td>
+
+                        {/* Actions */}
+                        <td className="py-4 px-4 md:px-6 text-center whitespace-nowrap">
+                          <div className="flex items-center justify-center gap-1.5">
+                            {isPaid ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedReceipt(payment)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+                                  title="View & Print Official Receipt"
+                                >
+                                  <Printer size={13} />
+                                  Receipt
+                                </button>
+
+                                <Link
+                                  href={`/invoices/${payment.id}`}
+                                  aria-label={`Open full bill for Room ${payment.tenants?.room_no}`}
+                                  className="p-2 rounded-lg text-slate-400 hover:text-teal-600 hover:bg-teal-50 transition-colors"
+                                  title="Open full bill"
+                                >
+                                  <ExternalLink size={14} />
+                                </Link>
+
+                                <button
+                                  type="button"
+                                  aria-label={`Revert payment for Room ${payment.tenants?.room_no} to unpaid`}
+                                  onClick={() => handleRevert(payment.id)}
+                                  disabled={revertingId === payment.id}
+                                  className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                                  title="Revert to Unpaid"
+                                >
+                                  {revertingId === payment.id ? (
+                                    <Loader2 size={14} className="animate-spin text-rose-500" />
+                                  ) : (
+                                    <RotateCcw size={14} />
+                                  )}
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => openRecordModal(payment)}
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                                >
+                                  <Check size={13} aria-hidden="true" />
+                                  Record Payment
+                                </button>
+
+                                <button
+                                  type="button"
+                                  disabled={sendingWaId === payment.id}
+                                  aria-label={`Send WhatsApp bill for Room ${payment.tenants?.room_no}`}
+                                  onClick={() => handleSendWhatsApp(payment)}
+                                  className={`p-2 rounded-lg transition-colors cursor-pointer disabled:opacity-60 ${
+                                    sentWaId === payment.id
+                                      ? "bg-emerald-600 text-white"
+                                      : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                                  }`}
+                                  title="Send bill & QR on WhatsApp"
+                                >
+                                  {sendingWaId === payment.id ? (
+                                    <Loader2 size={14} className="animate-spin" />
+                                  ) : sentWaId === payment.id ? (
+                                    <CheckCircle2 size={14} />
+                                  ) : (
+                                    <MessageSquare size={14} />
+                                  )}
+                                </button>
+
+                                <Link
+                                  href={`/invoices/${payment.id}`}
+                                  aria-label={`Open full bill for Room ${payment.tenants?.room_no}`}
+                                  className="p-2 rounded-lg text-slate-400 hover:text-teal-600 hover:bg-teal-50 transition-colors"
+                                  title="Open full bill"
+                                >
+                                  <ExternalLink size={14} />
+                                </Link>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 
@@ -860,6 +1037,6 @@ export default function PaymentsView({ initialPayments, month }: PaymentsViewPro
           </div>
         </div>
       )}
-    </main>
+    </div>
   );
 }

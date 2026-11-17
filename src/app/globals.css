@@ -101,6 +101,7 @@ html.dark .bg-slate-50 {
 }
 
 html.dark .bg-slate-50\/50,
+html.dark .bg-slate-50\/75,
 html.dark .bg-slate-50\/80 {
   background-color: rgba(15, 23, 42, 0.75) !important;
 }

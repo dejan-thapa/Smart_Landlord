@@ -184,24 +184,33 @@ export default function Sidebar() {
       </aside>
 
       {/* ── Mobile: Top Bar ── */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-40 flex items-center gap-3 px-4 h-14 bg-slate-950/95 backdrop-blur-md border-b border-slate-800 shadow-lg">
-        <button
-          type="button"
-          onClick={() => setMobileOpen(true)}
-          aria-label="Open navigation menu"
-          className="p-2 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 transition-colors"
-        >
-          <Menu size={20} />
-        </button>
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-teal-500 to-sky-600 flex items-center justify-center shadow-sm">
-            <Building2 size={14} aria-hidden="true" className="text-white" />
+      <div
+        className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-slate-950/95 backdrop-blur-md border-b border-slate-800 shadow-lg"
+        style={{
+          paddingTop: "env(safe-area-inset-top, 0px)",
+          paddingLeft: "env(safe-area-inset-left, 0px)",
+          paddingRight: "env(safe-area-inset-right, 0px)",
+        }}
+      >
+        <div className="flex items-center gap-3 px-4 h-14">
+          <button
+            type="button"
+            onClick={() => setMobileOpen(true)}
+            aria-label="Open navigation menu"
+            className="p-2 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 transition-colors"
+          >
+            <Menu size={20} />
+          </button>
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-teal-500 to-sky-600 flex items-center justify-center shadow-sm">
+              <Building2 size={14} aria-hidden="true" className="text-white" />
+            </div>
+            <span className="text-sm font-bold text-white">Smart Landlord</span>
           </div>
-          <span className="text-sm font-bold text-white">Smart Landlord</span>
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          <ThemeToggle compact />
-          <InstallPWAButton compact />
+          <div className="ml-auto flex items-center gap-2">
+            <ThemeToggle compact />
+            <InstallPWAButton compact />
+          </div>
         </div>
       </div>
 
@@ -220,12 +229,19 @@ export default function Sidebar() {
           />
 
           {/* Drawer Panel */}
-          <div className="relative flex flex-col w-64 max-w-[82vw] bg-slate-950/95 backdrop-blur-xl border-r border-slate-800 shadow-2xl animate-slide-in-left">
+          <div
+            className="relative flex flex-col w-64 max-w-[82vw] bg-slate-950/95 backdrop-blur-xl border-r border-slate-800 shadow-2xl animate-slide-in-left"
+            style={{
+              paddingTop: "env(safe-area-inset-top, 0px)",
+              paddingBottom: "env(safe-area-inset-bottom, 0px)",
+            }}
+          >
             <button
               type="button"
               onClick={() => setMobileOpen(false)}
               aria-label="Close navigation menu"
-              className="absolute top-3.5 right-3 p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-colors z-10"
+              style={{ top: "calc(0.875rem + env(safe-area-inset-top, 0px))" }}
+              className="absolute right-3 p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-colors z-10"
             >
               <X size={18} />
             </button>

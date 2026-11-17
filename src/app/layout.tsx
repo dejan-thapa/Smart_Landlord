@@ -30,7 +30,7 @@ export const metadata: Metadata = {
   applicationName: "Landlord OS",
   appleWebApp: {
     capable: true,
-    statusBarStyle: "black-translucent",
+    statusBarStyle: "black",
     title: "Landlord OS",
   },
   icons: {
@@ -47,12 +47,11 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#0f766e" },
-    { media: "(prefers-color-scheme: dark)", color: "#0b1120" },
+    { media: "(prefers-color-scheme: dark)", color: "#020617" },
   ],
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
-  viewportFit: "cover",
 };
 
 const themeInitScript = `
@@ -95,7 +94,7 @@ export default function RootLayout({
           {/* Main content — offset for mobile top bar */}
           <main
             id="main-content"
-            className="flex-1 min-w-0 pt-14 lg:pt-0 overflow-x-hidden"
+            className="flex-1 min-w-0 pt-[calc(3.5rem+env(safe-area-inset-top,0px))] lg:pt-0 overflow-x-hidden"
           >
             {children}
           </main>
