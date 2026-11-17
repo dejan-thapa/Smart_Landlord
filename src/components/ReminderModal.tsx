@@ -23,7 +23,7 @@ import {
   buildWhatsAppBillMessage,
   normalizePhoneNumber,
 } from "@/lib/reminder-utils";
-import { generateBillCardPng, sendBillViaWhatsApp } from "@/lib/bill-image";
+import { generateBillCardPng, sendBillViaWhatsApp, openWhatsAppDirectly } from "@/lib/bill-image";
 
 interface ReminderModalProps {
   data: InvoiceReminderData;
@@ -60,7 +60,9 @@ export default function ReminderModal({
     setIsMobile(
       typeof window !== "undefined" &&
       (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
-       (navigator.maxTouchPoints > 0 && window.innerWidth < 768))
+       (navigator.maxTouchPoints > 0 && window.innerWidth < 768) ||
+       window.matchMedia("(display-mode: standalone)").matches ||
+       Boolean((navigator as unknown as { standalone?: boolean }).standalone))
     );
   }, []);
 
@@ -103,41 +105,23 @@ export default function ReminderModal({
     }
   }, [customPhone, data, onClose, onSent]);
 
-  const handleOpenWhatsAppDirect = async () => {
+  const handleOpenWhatsAppDirect = () => {
     if (!customPhone.trim()) {
       setErrorMsg("Please enter a tenant WhatsApp number above.");
       return;
     }
-    setIsSending(true);
     setErrorMsg(null);
     setStatusMsg("Opening WhatsApp…");
 
     try {
-      // 1. Try copying the visual bill card to clipboard so the user can paste it
-      try {
-        const { blob } = await generateBillCardPng({ ...data, phoneNumber: customPhone.trim() });
-        if (typeof navigator !== "undefined" && navigator.clipboard && window.ClipboardItem) {
-          await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-          setStatusMsg("✓ Bill image copied to clipboard! Just tap Paste in WhatsApp chat.");
-        }
-      } catch {}
-
-      // 2. Open WhatsApp directly via universal deep-link
-      const cleanPhone = normalizePhoneNumber(customPhone);
       const text = buildWhatsAppBillMessage({ ...data, phoneNumber: customPhone.trim() });
-      const waUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(text)}`;
-
-      if (isMobile) {
-        window.location.href = waUrl;
-      } else {
-        window.open(waUrl, "_blank");
-      }
+      openWhatsAppDirectly(customPhone.trim(), text);
 
       setSentSuccess(true);
       onSent?.();
-      setTimeout(() => onClose(), 1800);
-    } finally {
-      setIsSending(false);
+      setTimeout(() => onClose(), 1200);
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : "Could not open WhatsApp.");
     }
   };
 
@@ -167,19 +151,19 @@ export default function ReminderModal({
         onSent?.();
         setTimeout(() => onClose(), 1500);
       } else {
-        await handleOpenWhatsAppDirect();
+        handleOpenWhatsAppDirect();
       }
     } catch (err: unknown) {
       if (err instanceof Error && err.name === "AbortError") return;
-      await handleOpenWhatsAppDirect();
+      handleOpenWhatsAppDirect();
     } finally {
       setIsGenerating(false);
     }
   };
 
-  // Poll /api/whatsapp every 2.5s while modal is open and not yet connected
+  // Poll /api/whatsapp every 2.5s while modal is open on desktop and not yet connected
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || isMobile) return;
 
     let cancelled = false;
     let timer: ReturnType<typeof setInterval> | null = null;

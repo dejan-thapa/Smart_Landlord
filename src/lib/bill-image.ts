@@ -268,10 +268,74 @@ export async function generateBillCardPng(
 }
 
 /**
+ * Opens WhatsApp directly on mobile devices (PWA / browser) or desktop.
+ * Uses native URL schemes and universal links that reliably punch out of PWA standalone mode.
+ */
+export function openWhatsAppDirectly(
+  phoneNumber: string | null | undefined,
+  text: string
+): boolean {
+  if (typeof window === "undefined") return false;
+
+  const cleanPhone = normalizePhoneNumber(phoneNumber);
+  const encodedText = encodeURIComponent(text);
+
+  const isIOS = /iPad|iPhone|iPod/i.test(navigator.userAgent);
+  const isAndroid = /Android/i.test(navigator.userAgent);
+  const isMobile =
+    isIOS ||
+    isAndroid ||
+    (navigator.maxTouchPoints > 0 && window.innerWidth < 768) ||
+    window.matchMedia("(display-mode: standalone)").matches ||
+    Boolean((navigator as unknown as { standalone?: boolean }).standalone);
+
+  // Native WhatsApp scheme (launches native app directly without loading intermediate web pages)
+  const appSchemeUrl = cleanPhone
+    ? `whatsapp://send?phone=${cleanPhone}&text=${encodedText}`
+    : `whatsapp://send?text=${encodedText}`;
+
+  // Universal WhatsApp link (official fallback that works across web and mobile)
+  const universalUrl = cleanPhone
+    ? `https://wa.me/${cleanPhone}?text=${encodedText}`
+    : `https://wa.me/?text=${encodedText}`;
+
+  if (isMobile) {
+    // In mobile PWA or mobile browser:
+    // Create an anchor with target="_blank" to escape PWA container sandbox cleanly
+    try {
+      const a = document.createElement("a");
+      a.href = appSchemeUrl;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      // Fallback timer: if document stays visible and active after 1000ms (meaning custom scheme
+      // was not handled, e.g. WhatsApp is not installed or strict browser), navigate to wa.me
+      setTimeout(() => {
+        if (!document.hidden) {
+          window.location.href = universalUrl;
+        }
+      }, 1000);
+
+      return true;
+    } catch {
+      window.location.href = universalUrl;
+      return true;
+    }
+  }
+
+  // Desktop: open universal link in a new tab
+  window.open(universalUrl, "_blank", "noopener,noreferrer");
+  return true;
+}
+
+/**
  * Sends or shares the bill statement + QR card image with the tenant.
  * - On mobile devices (PWA / mobile browser): Immediately opens the tenant's WhatsApp chat
- *   via universal WhatsApp deep-link with prefilled statement and copies the visual bill card to clipboard.
- * - On desktop: Tries background delivery via the local WhatsApp connection; falls back to opening WhatsApp Web.
+ *   via native app deep-link with prefilled statement and breakdown.
+ * - On desktop: Tries background delivery via the local WhatsApp connection if connected; falls back to opening WhatsApp Web.
  */
 export async function sendBillViaWhatsApp(
   data: InvoiceReminderData,
@@ -288,34 +352,17 @@ export async function sendBillViaWhatsApp(
   const isMobile =
     typeof window !== "undefined" &&
     (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
-      (navigator.maxTouchPoints > 0 && window.innerWidth < 768));
+      (navigator.maxTouchPoints > 0 && window.innerWidth < 768) ||
+      window.matchMedia("(display-mode: standalone)").matches ||
+      Boolean((navigator as unknown as { standalone?: boolean }).standalone));
 
   // 1. On mobile devices / PWA or when forced direct:
-  // ALWAYS open WhatsApp directly on the user's device!
+  // Immediately launch WhatsApp without awaiting canvas generation or clipboard writes,
+  // guaranteeing the user gesture is 100% active and unblocked.
   if (isMobile || options?.forceDirect) {
     try {
-      // Try copying the visual bill card to clipboard so the user can just tap Paste in WhatsApp
-      try {
-        const { blob } = await generateBillCardPng(data);
-        if (typeof navigator !== "undefined" && navigator.clipboard && window.ClipboardItem) {
-          await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-        }
-      } catch {
-        // Clipboard copy optional progressive enhancement
-      }
-
-      const cleanPhone = normalizePhoneNumber(data.phoneNumber);
       const text = buildWhatsAppBillMessage(data);
-      const waUrl = cleanPhone
-        ? `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(text)}`
-        : `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
-
-      if (isMobile) {
-        window.location.href = waUrl;
-      } else {
-        window.open(waUrl, "_blank");
-      }
-
+      openWhatsAppDirectly(data.phoneNumber, text);
       return { sent: true, needsModal: false };
     } catch (err: unknown) {
       return {
@@ -326,46 +373,45 @@ export async function sendBillViaWhatsApp(
     }
   }
 
-  // 2. On desktop PC, try the local background WhatsApp bot if connected
+  // 2. On desktop PC: check if the local background WhatsApp bot is already connected
   try {
-    const { base64 } = await generateBillCardPng(data);
-    const nepaliMonth = formatNepaliMonth(data.billingMonth);
+    const statusRes = await fetch("/api/whatsapp", { cache: "no-store" });
+    if (statusRes.ok) {
+      const statusJson = await statusRes.json();
+      if (statusJson.status === "connected") {
+        const { base64 } = await generateBillCardPng(data);
+        const nepaliMonth = formatNepaliMonth(data.billingMonth);
+        const caption =
+          `Here is your rent bill statement for *${nepaliMonth}* (*Room ${data.roomNo}*):\n\n` +
+          `*Total Due: Rs. ${Number(data.totalDue).toLocaleString()}*`;
 
-    // 1st Message Caption: Direct bill statement and total due only
-    const caption =
-      `Here is your rent bill statement for *${nepaliMonth}* (*Room ${data.roomNo}*):\n\n` +
-      `*Total Due: Rs. ${Number(data.totalDue).toLocaleString()}*`;
+        const res = await fetch("/api/whatsapp", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "send",
+            phone: data.phoneNumber,
+            imageBase64: base64,
+            caption,
+            sendCompanionQr: true,
+            amount: Number(data.totalDue),
+          }),
+        });
 
-    const res = await fetch("/api/whatsapp", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "send",
-        phone: data.phoneNumber,
-        imageBase64: base64,
-        caption,
-        sendCompanionQr: true,
-        amount: Number(data.totalDue),
-      }),
-    });
-
-    if (res.ok) {
-      const json = await res.json();
-      if (json.success) {
-        return { sent: true, needsModal: false };
-      }
-      if (json.needsAuth) {
-        return { sent: false, needsModal: true };
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success) {
+            return { sent: true, needsModal: false };
+          }
+        }
       }
     }
   } catch {
-    // Serverless (e.g. Vercel) or local network unavailable
+    // Local bot not running or deployed on Vercel
   }
 
-  // 3. Desktop Fallback: open WhatsApp Web with prefilled message
-  const cleanPhone = normalizePhoneNumber(data.phoneNumber);
+  // 3. Desktop Fallback: open WhatsApp Web directly
   const text = buildWhatsAppBillMessage(data);
-  const waUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(text)}`;
-  window.open(waUrl, "_blank");
+  openWhatsAppDirectly(data.phoneNumber, text);
   return { sent: true, needsModal: false };
 }

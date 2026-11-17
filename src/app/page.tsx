@@ -13,7 +13,8 @@ import {
 import { supabase } from "@/lib/supabase";
 import MonthSelector from "@/components/MonthSelector";
 import NepaliDate from "nepali-date-converter";
-import { normalizeTenant, type InvoiceTenant, type InvoiceWithTenant } from "@/lib/types";
+import { normalizeTenant, type InvoiceTenant, type InvoiceWithTenant, getInvoicePreviousBalance } from "@/lib/types";
+import { normalizePhoneNumber, buildWhatsAppBillMessage } from "@/lib/reminder-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -385,20 +386,33 @@ export default async function Dashboard({
                 const roomLabel = `Room ${tenant.room_no}`;
                 const sideLabel = tenant.room_side || "Main";
 
-                // WhatsApp Reminder Link for unpaid with eSewa payment instructions
+                // WhatsApp Reminder Link with normalized phone number and full statement
                 const accountHolder = process.env.PAYMENT_ACCOUNT_HOLDER || "Dejan Thapa";
                 const bankName = process.env.PAYMENT_BANK_NAME || "eSewa";
                 const accountNo = process.env.PAYMENT_ACCOUNT_NO || "9842835084";
 
-                const whatsappUrl = tenant.phone_number
-                  ? `https://wa.me/${tenant.phone_number.replace(/\D/g, "")}?text=${encodeURIComponent(
-                      `Namaste ${tenantName},\n` +
-                      `Here is your rent bill statement for *${nepaliMonthLabel}* (*${roomLabel}*).\n\n` +
-                      `*Total Due: ${formatNPR(totalDue)}*\n\n` +
-                      `*eSewa Payment Details:*\n` +
-                      `• Name: *${accountHolder}*\n` +
-                      `• eSewa ID: \`${accountNo}\`\n\n` +
-                      `Please transfer to eSewa or scan the QR code, and send the payment screenshot. Thank you!`
+                const cleanPhone = normalizePhoneNumber(tenant.phone_number);
+                const whatsappUrl = cleanPhone
+                  ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(
+                      buildWhatsAppBillMessage({
+                        tenantName: tenant.name || "",
+                        roomNo: String(tenant.room_no),
+                        roomSide: tenant.room_side || "",
+                        phoneNumber: tenant.phone_number,
+                        billingMonth: month,
+                        totalDue: totalDue,
+                        rentAmount: Number(invoice?.rent_amount || tenant.base_rent || 0),
+                        electricityCost: Number(invoice?.electricity_cost || 0),
+                        waterShare: Number(invoice?.water_share || 0),
+                        wifiShare: Number(invoice?.wifi_share || 0),
+                        garbageShare: Number(invoice?.garbage_share || 0),
+                        previousBalance: invoice ? getInvoicePreviousBalance(invoice) : 0,
+                        bankDetails: {
+                          accountHolder,
+                          bankName,
+                          accountNo,
+                        },
+                      })
                     )}`
                   : null;
 

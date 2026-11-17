@@ -118,20 +118,49 @@ Please send the screenshot after payment. Dhanyabad!`;
 }
 
 /**
- * Builds standard clean WhatsApp bill statement with eSewa details
+ * Builds standard clean WhatsApp bill statement with itemized breakdown and payment details
  */
 export function buildWhatsAppBillMessage(data: InvoiceReminderData): string {
   const nepaliMonth = formatNepaliMonth(data.billingMonth);
   const total = Number(data.totalDue).toLocaleString();
   const accountHolder = data.bankDetails?.accountHolder || "Dejan Thapa";
+  const bankName = data.bankDetails?.bankName || "eSewa";
   const accountNo = data.bankDetails?.accountNo || "9842835084";
+  const greeting = data.tenantName ? `Namaste ${data.tenantName.trim()}!` : "Namaste!";
 
-  return `Here is your rent bill statement for *${nepaliMonth}* (*Room ${data.roomNo}*):\n\n` +
-    `*Total Due: Rs. ${total}*\n\n` +
-    `eSewa Payment Details:\n` +
-    `• Name: *${accountHolder}*\n` +
+  const breakdownLines: string[] = [];
+  if (data.rentAmount !== undefined && Number(data.rentAmount) > 0) {
+    breakdownLines.push(`• Base Rent: Rs. ${Number(data.rentAmount).toLocaleString()}`);
+  }
+  if (data.electricityCost !== undefined && Number(data.electricityCost) > 0) {
+    breakdownLines.push(`• Electricity: Rs. ${Number(data.electricityCost).toLocaleString()}`);
+  }
+  if (data.waterShare !== undefined && Number(data.waterShare) > 0) {
+    breakdownLines.push(`• Water (shared): Rs. ${Number(data.waterShare).toLocaleString()}`);
+  }
+  if (data.wifiShare !== undefined && Number(data.wifiShare) > 0) {
+    breakdownLines.push(`• WiFi (shared): Rs. ${Number(data.wifiShare).toLocaleString()}`);
+  }
+  if (data.garbageShare !== undefined && Number(data.garbageShare) > 0) {
+    breakdownLines.push(`• Garbage (shared): Rs. ${Number(data.garbageShare).toLocaleString()}`);
+  }
+  if (data.previousBalance !== undefined && Number(data.previousBalance) > 0) {
+    breakdownLines.push(`• Previous Unpaid Balance: Rs. ${Number(data.previousBalance).toLocaleString()}`);
+  }
+
+  let breakdownSection = "";
+  if (breakdownLines.length > 0) {
+    breakdownSection = `📋 *Bill Breakdown:*\n${breakdownLines.join("\n")}\n\n`;
+  }
+
+  return `${greeting}\n` +
+    `Here is your rent bill statement for *${nepaliMonth}* (*Room ${data.roomNo}*):\n\n` +
+    breakdownSection +
+    `💰 *Total Due: Rs. ${total}*\n\n` +
+    `📱 *Payment Details (${bankName}):*\n` +
+    `• Account Name: *${accountHolder}*\n` +
     `• eSewa ID / Number: *${accountNo}*\n\n` +
-    `Please reply with the payment confirmation screenshot once transferred. Thank you!`;
+    `Please reply with the payment confirmation screenshot once transferred. Thank you! 🙏`;
 }
 
 /**
