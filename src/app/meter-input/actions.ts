@@ -2,6 +2,7 @@
 
 import { supabase } from "@/lib/supabase";
 import { revalidatePath } from "next/cache";
+import { getInvoicePreviousBalance } from "@/lib/types";
 
 export async function fetchMeterData() {
   const now = new Date();
@@ -65,7 +66,7 @@ export async function saveMeterReadings(
   const tenantIds = readings.map((r) => r.tenant_id);
   const { data: existingInvoices } = await supabase
     .from("invoices")
-    .select("id, tenant_id, rent_amount, water_share, wifi_share, garbage_share")
+    .select("id, tenant_id, rent_amount, water_share, wifi_share, garbage_share, electricity_cost, previous_balance, total_due")
     .in("tenant_id", tenantIds)
     .eq("billing_month", currentMonth);
 
@@ -76,12 +77,14 @@ export async function saveMeterReadings(
         // Delta calculation: Current - Previous
         const unitsUsed = Math.max(0, Number(reading.current_reading) - Number(reading.previous_reading || 0));
         const newElectricity = unitsUsed * ratePerUnit;
+        const prevBalance = getInvoicePreviousBalance(inv);
         const newTotal =
           Number(inv.rent_amount) +
           Number(inv.water_share || 0) +
           Number(inv.wifi_share || 0) +
           Number(inv.garbage_share || 0) +
-          newElectricity;
+          newElectricity +
+          prevBalance;
 
         await supabase
           .from("invoices")
@@ -181,20 +184,34 @@ export async function generateInvoiceForRoom(
   // Calculate electricity cost from units consumed (Current - Previous)
   const electricityCost = unitsUsed * unitRate;
 
-  // Preserve existing payment status if already generated
+  // Preserve existing payment status & arrears if already generated; otherwise sum prior unpaid invoices
   const { data: existingInvoice } = await supabase
     .from('invoices')
-    .select('payment_status')
+    .select('payment_status, previous_balance, total_due, rent_amount, electricity_cost, water_share, wifi_share, garbage_share')
     .eq('tenant_id', tenantId)
     .eq('billing_month', currentMonth)
     .maybeSingle();
+
+  let previousBalance = 0;
+  if (existingInvoice) {
+    previousBalance = getInvoicePreviousBalance(existingInvoice);
+  } else {
+    const { data: priorUnpaid } = await supabase
+      .from('invoices')
+      .select('total_due')
+      .eq('tenant_id', tenantId)
+      .lt('billing_month', currentMonth)
+      .eq('payment_status', 'unpaid');
+    previousBalance = (priorUnpaid || []).reduce((sum, inv) => sum + Number(inv.total_due || 0), 0);
+  }
 
   const totalDue = 
     Number(tenant.base_rent) + 
     Number(tenant.water_rate || 0) + 
     Number(tenant.wifi_rate || 0) + 
     Number(tenant.garbage_rate || 0) + 
-    electricityCost;
+    electricityCost +
+    previousBalance;
 
   const invoiceData = {
       tenant_id: tenant.id,
@@ -204,6 +221,7 @@ export async function generateInvoiceForRoom(
       wifi_share: tenant.wifi_rate || 0,
       garbage_share: tenant.garbage_rate || 0,
       electricity_cost: electricityCost,
+      previous_balance: previousBalance,
       total_due: totalDue,
       payment_status: existingInvoice?.payment_status || 'unpaid',
   };
