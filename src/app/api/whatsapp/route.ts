@@ -8,7 +8,26 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const BOT_URL = process.env.WHATSAPP_BOT_URL ? process.env.WHATSAPP_BOT_URL.replace(/\/+$/, "") : null;
+const BOT_API_KEY = process.env.BOT_API_KEY || "smart-landlord-secret-key";
+
 export async function GET() {
+  // If cloud bot microservice is configured (e.g. on Render / Railway), proxy to it
+  if (BOT_URL) {
+    try {
+      const res = await fetch(`${BOT_URL}/api/status`, {
+        headers: { "x-api-key": BOT_API_KEY },
+        cache: "no-store",
+      });
+      if (res.ok) {
+        const json = await res.json();
+        return NextResponse.json(json);
+      }
+    } catch (err) {
+      console.warn("Cloud bot unreachable, falling back to local:", err);
+    }
+  }
+
   try {
     const status = await getWhatsAppStatus();
     return NextResponse.json(status);
@@ -29,6 +48,25 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     const action = body?.action || "send";
+
+    // Proxy to Cloud Bot if configured
+    if (BOT_URL) {
+      try {
+        const targetEndpoint = action === "logout" ? `${BOT_URL}/api/logout` : `${BOT_URL}/api/send`;
+        const res = await fetch(targetEndpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": BOT_API_KEY,
+          },
+          body: JSON.stringify(body),
+        });
+        const json = await res.json();
+        return NextResponse.json(json, { status: res.status });
+      } catch (err) {
+        console.warn("Cloud bot failed, falling back to local:", err);
+      }
+    }
 
     if (action === "logout") {
       await logoutWhatsApp();

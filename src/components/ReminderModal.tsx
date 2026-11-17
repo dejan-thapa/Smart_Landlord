@@ -161,9 +161,9 @@ export default function ReminderModal({
     }
   };
 
-  // Poll /api/whatsapp every 2.5s while modal is open on desktop and not yet connected
+  // Poll /api/whatsapp every 2.5s while modal is open and not yet connected
   useEffect(() => {
-    if (!isOpen || isMobile) return;
+    if (!isOpen) return;
 
     let cancelled = false;
     let timer: ReturnType<typeof setInterval> | null = null;
@@ -305,53 +305,37 @@ export default function ReminderModal({
 
         {/* Modal Body */}
         <div className="p-5 overflow-y-auto space-y-4 flex-1">
-          {/* Mobile vs Desktop Connection Card */}
+          {/* WhatsApp Connection Status Card */}
           {waStatus !== "connected" && (
-            isMobile ? (
-              <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl p-4 flex items-center gap-3 shadow-xs">
-                <div className="w-10 h-10 rounded-xl bg-[#25D366] text-white flex items-center justify-center shrink-0 shadow-sm">
-                  <MessageSquare size={20} />
-                </div>
-                <div className="flex-1">
-                  <h4 className="text-sm font-bold text-emerald-950 dark:text-emerald-100">
-                    Send via WhatsApp App
-                  </h4>
-                  <p className="text-xs text-emerald-800/80 dark:text-emerald-300">
-                    Tap the green button below to send the bill statement and image directly via WhatsApp!
-                  </p>
-                </div>
+            <div className="bg-white dark:bg-slate-800/90 border border-emerald-200 dark:border-emerald-800 rounded-2xl p-4 space-y-3 shadow-xs">
+              <div className="flex items-center gap-2">
+                <QrCode size={18} className="text-[#25D366] shrink-0" />
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Link Your WhatsApp (24/7 Auto-Send)
+                </h4>
               </div>
-            ) : (
-              <div className="bg-white dark:bg-slate-800/90 border border-emerald-200 dark:border-emerald-800 rounded-2xl p-4 space-y-3 shadow-xs">
-                <div className="flex items-center gap-2">
-                  <QrCode size={18} className="text-[#25D366] shrink-0" />
-                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                    Link Your WhatsApp (Optional Desktop Auto-Send)
-                  </h4>
-                </div>
-                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                  Open WhatsApp on your phone → <strong>Linked Devices</strong> →{" "}
-                  <strong>Link a Device</strong> → Scan this QR code to enable 1-click auto-sending from your PC.
-                </p>
-                <div className="flex flex-col items-center justify-center py-2">
-                  {qrDataUrl ? (
-                    <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={qrDataUrl}
-                        alt="WhatsApp Link QR Code"
-                        className="w-52 h-52 object-contain"
-                      />
-                    </div>
-                  ) : (
-                    <div className="w-52 h-52 rounded-2xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center gap-2 text-slate-500 dark:text-slate-400">
-                      <Loader2 size={24} className="animate-spin text-[#25D366]" />
-                      <span className="text-xs font-medium">Generating QR code…</span>
-                    </div>
-                  )}
-                </div>
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                Open WhatsApp on your phone → <strong>Linked Devices</strong> →{" "}
+                <strong>Link a Device</strong> → Scan this QR code to enable 1-click delivery of both the Bill Card and eSewa QR directly to your tenants.
+              </p>
+              <div className="flex flex-col items-center justify-center py-2">
+                {qrDataUrl ? (
+                  <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={qrDataUrl}
+                      alt="WhatsApp Link QR Code"
+                      className="w-52 h-52 object-contain"
+                    />
+                  </div>
+                ) : (
+                  <div className="w-52 h-52 rounded-2xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center gap-2 text-slate-500 dark:text-slate-400">
+                    <Loader2 size={24} className="animate-spin text-[#25D366]" />
+                    <span className="text-xs font-medium">Connecting WhatsApp service…</span>
+                  </div>
+                )}
               </div>
-            )
+            </div>
           )}
 
           {/* Recipient Phone Row */}

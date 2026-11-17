@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: smart-landlord-whatsapp-bot
+    runtime: node
+    plan: free
+    region: oregon
+    rootDir: services/whatsapp-bot
+    buildCommand: npm install
+    startCommand: node server.js
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: BOT_API_KEY
+        value: smart-landlord-secret-key
+      - key: PAYMENT_ACCOUNT_HOLDER
+        value: Dejan Thapa
+      - key: PAYMENT_BANK_NAME
+        value: eSewa
+      - key: PAYMENT_ACCOUNT_NO
+        value: "9842835084"
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false

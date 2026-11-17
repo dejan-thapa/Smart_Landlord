@@ -333,9 +333,9 @@ export function openWhatsAppDirectly(
 
 /**
  * Sends or shares the bill statement + QR card image with the tenant.
- * - On mobile devices (PWA / mobile browser): Immediately opens the tenant's WhatsApp chat
- *   via native app deep-link with prefilled statement and breakdown.
- * - On desktop: Tries background delivery via the local WhatsApp connection if connected; falls back to opening WhatsApp Web.
+ * - When Cloud / Local WhatsApp Bot is connected: Automatically delivers BOTH the Bill Card PNG
+ *   and the standalone high-res eSewa QR Code image in the background.
+ * - If not yet connected: Opens the ReminderModal so landlord can link WhatsApp or send directly.
  */
 export async function sendBillViaWhatsApp(
   data: InvoiceReminderData,
@@ -349,17 +349,8 @@ export async function sendBillViaWhatsApp(
     };
   }
 
-  const isMobile =
-    typeof window !== "undefined" &&
-    (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
-      (navigator.maxTouchPoints > 0 && window.innerWidth < 768) ||
-      window.matchMedia("(display-mode: standalone)").matches ||
-      Boolean((navigator as unknown as { standalone?: boolean }).standalone));
-
-  // 1. On mobile devices / PWA or when forced direct:
-  // Immediately launch WhatsApp without awaiting canvas generation or clipboard writes,
-  // guaranteeing the user gesture is 100% active and unblocked.
-  if (isMobile || options?.forceDirect) {
+  // 1. If forced direct (e.g. user tapped "WhatsApp Direct"):
+  if (options?.forceDirect) {
     try {
       const text = buildWhatsAppBillMessage(data);
       openWhatsAppDirectly(data.phoneNumber, text);
@@ -373,7 +364,7 @@ export async function sendBillViaWhatsApp(
     }
   }
 
-  // 2. On desktop PC: check if the local background WhatsApp bot is already connected
+  // 2. Check 24/7 Cloud WhatsApp Bot (or local bot)
   try {
     const statusRes = await fetch("/api/whatsapp", { cache: "no-store" });
     if (statusRes.ok) {
@@ -407,11 +398,10 @@ export async function sendBillViaWhatsApp(
       }
     }
   } catch {
-    // Local bot not running or deployed on Vercel
+    // Bot unreachable
   }
 
-  // 3. Desktop Fallback: open WhatsApp Web directly
-  const text = buildWhatsAppBillMessage(data);
-  openWhatsAppDirectly(data.phoneNumber, text);
-  return { sent: true, needsModal: false };
+  // 3. If bot is not connected yet, open ReminderModal so landlord can link it via QR code,
+  // or use the instant "Send with QR Image" / "WhatsApp Direct" buttons!
+  return { sent: false, needsModal: true };
 }
