@@ -5,6 +5,7 @@ import NepaliDate from "nepali-date-converter";
 import BulkEmailButton from "./BulkEmailButton";
 import MonthSelector from "@/components/MonthSelector";
 import InvoiceCardItem from "./InvoiceCardItem";
+import type { InvoiceWithTenant } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,19 @@ function normalizeSide(side?: string | null): "Side A" | "Side B" | "Other" {
   if (s === "side a" || s === "a" || s === "side_a") return "Side A";
   if (s === "side b" || s === "b" || s === "side_b") return "Side B";
   return "Other";
+}
+
+function sortInvoicesByRoomAsc(invoices: InvoiceWithTenant[]): InvoiceWithTenant[] {
+  return [...invoices].sort((a, b) => {
+    const roomA = a.tenants?.room_no || "";
+    const roomB = b.tenants?.room_no || "";
+    const numA = parseInt((roomA.match(/\d+/) || [""])[0], 10);
+    const numB = parseInt((roomB.match(/\d+/) || [""])[0], 10);
+    if (!isNaN(numA) && !isNaN(numB) && numA !== numB) {
+      return numA - numB;
+    }
+    return roomA.localeCompare(roomB, undefined, { numeric: true, sensitivity: "base" });
+  });
 }
 
 export default async function InvoicesPage({ searchParams }: { searchParams: Promise<{ filter?: string; month?: string }> }) {
@@ -46,9 +60,9 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
     return true;
   });
 
-  const sideA = displayInvoices.filter((inv) => normalizeSide(inv.tenants?.room_side) === "Side A");
-  const sideB = displayInvoices.filter((inv) => normalizeSide(inv.tenants?.room_side) === "Side B");
-  const sideOther = displayInvoices.filter((inv) => normalizeSide(inv.tenants?.room_side) === "Other");
+  const sideA = sortInvoicesByRoomAsc(displayInvoices.filter((inv) => normalizeSide(inv.tenants?.room_side) === "Side A"));
+  const sideB = sortInvoicesByRoomAsc(displayInvoices.filter((inv) => normalizeSide(inv.tenants?.room_side) === "Side B"));
+  const sideOther = sortInvoicesByRoomAsc(displayInvoices.filter((inv) => normalizeSide(inv.tenants?.room_side) === "Other"));
 
   return (
     <main className="max-w-4xl mx-auto p-4 md:p-6 pb-12">

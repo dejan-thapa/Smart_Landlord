@@ -22,10 +22,22 @@ export async function fetchInvoices(billingMonth: string): Promise<InvoiceWithTe
     console.error("fetchInvoices error:", error);
     return [];
   }
-  return (data || []).map((inv) => ({
+  const mapped = (data || []).map((inv) => ({
     ...inv,
     tenants: normalizeTenant<InvoiceTenant>(inv.tenants),
   })) as InvoiceWithTenant[];
+
+  // Sort serially in ascending order by room number (1, 2, 3...)
+  return mapped.sort((a, b) => {
+    const roomA = a.tenants?.room_no || "";
+    const roomB = b.tenants?.room_no || "";
+    const numA = parseInt((roomA.match(/\d+/) || [""])[0], 10);
+    const numB = parseInt((roomB.match(/\d+/) || [""])[0], 10);
+    if (!isNaN(numA) && !isNaN(numB) && numA !== numB) {
+      return numA - numB;
+    }
+    return roomA.localeCompare(roomB, undefined, { numeric: true, sensitivity: "base" });
+  });
 }
 
 export async function fetchInvoiceById(id: string): Promise<InvoiceWithTenant | null> {
