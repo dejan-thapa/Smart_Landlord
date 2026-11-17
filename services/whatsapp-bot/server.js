@@ -50,7 +50,7 @@ function normalizePhoneNumber(rawPhone) {
   return cleaned;
 }
 
-// Restore session from Supabase if local auth is empty
+// Restore all session files from Supabase if local auth is empty
 async function restoreSessionFromSupabase() {
   if (!supabase) return;
   try {
@@ -59,7 +59,9 @@ async function restoreSessionFromSupabase() {
 
     await fsPromises.mkdir(AUTH_DIR, { recursive: true });
     for (const row of data) {
-      const filePath = path.join(AUTH_DIR, row.id);
+      const safeName = path.basename(row.id);
+      if (!safeName) continue;
+      const filePath = path.join(AUTH_DIR, safeName);
       await fsPromises.writeFile(filePath, row.data, "utf8");
     }
     console.log(`[WhatsApp Bot] Restored ${data.length} session files from Supabase.`);
@@ -68,16 +70,55 @@ async function restoreSessionFromSupabase() {
   }
 }
 
-// Sync session file to Supabase
-async function syncSessionFileToSupabase(fileName, content) {
+let syncTimer = null;
+
+// Sync all auth files (creds.json + Signal encryption keys) to Supabase
+async function syncAllSessionFilesToSupabase() {
   if (!supabase) return;
   try {
-    await supabase.from("whatsapp_sessions").upsert({
-      id: fileName,
-      data: content,
-      updated_at: new Date().toISOString(),
-    });
+    if (!fs.existsSync(AUTH_DIR)) return;
+    const files = await fsPromises.readdir(AUTH_DIR);
+    const jsonFiles = files.filter((f) => f.endsWith(".json"));
+    if (jsonFiles.length === 0) return;
+
+    const now = new Date().toISOString();
+    const rows = [];
+    for (const fileName of jsonFiles) {
+      try {
+        const content = await fsPromises.readFile(path.join(AUTH_DIR, fileName), "utf8");
+        rows.push({ id: fileName, data: content, updated_at: now });
+      } catch {}
+    }
+
+    if (rows.length > 0) {
+      const { error } = await supabase.from("whatsapp_sessions").upsert(rows);
+      if (error) {
+        console.warn("[WhatsApp Bot] Supabase session sync warning:", error.message);
+      }
+    }
+  } catch (err) {
+    console.warn("[WhatsApp Bot] Could not sync session files to Supabase:", err.message);
+  }
+}
+
+function scheduleSessionSync(delayMs = 1500) {
+  if (!supabase) return;
+  if (syncTimer) clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => {
+    syncTimer = null;
+    syncAllSessionFilesToSupabase().catch(() => {});
+  }, delayMs);
+}
+
+async function clearStoredSession() {
+  try {
+    await fsPromises.rm(AUTH_DIR, { recursive: true, force: true });
   } catch {}
+  if (supabase) {
+    try {
+      await supabase.from("whatsapp_sessions").delete().neq("id", "");
+    } catch {}
+  }
 }
 
 async function initWhatsApp() {
@@ -118,14 +159,7 @@ async function initWhatsApp() {
 
       sock.ev.on("creds.update", async () => {
         await saveCreds();
-        // Sync creds.json to Supabase
-        try {
-          const credsPath = path.join(AUTH_DIR, "creds.json");
-          if (fs.existsSync(credsPath)) {
-            const data = await fsPromises.readFile(credsPath, "utf8");
-            syncSessionFileToSupabase("creds.json", data);
-          }
-        } catch {}
+        scheduleSessionSync(1000);
       });
 
       sock.ev.on("connection.update", async (update) => {
@@ -149,14 +183,13 @@ async function initWhatsApp() {
           waState.userPhone = sock.user?.id?.split(":")[0] || null;
           waState.lastError = null;
           console.log(`[WhatsApp Bot] Connected successfully as ${waState.userPhone}`);
+          syncAllSessionFilesToSupabase().catch(() => {});
         }
 
         if (connection === "close") {
           const statusCode = lastDisconnect?.error?.output?.statusCode;
-          const shouldReconnect =
-            !waState.isLoggingOut &&
-            statusCode !== DisconnectReason.loggedOut &&
-            statusCode !== 401;
+          const isLoggedOut = statusCode === DisconnectReason.loggedOut || statusCode === 401;
+          const shouldReconnect = !waState.isLoggingOut && !isLoggedOut;
 
           console.log(
             `[WhatsApp Bot] Connection closed (status: ${statusCode}). Reconnect: ${shouldReconnect}`
@@ -173,9 +206,15 @@ async function initWhatsApp() {
               initWhatsApp().catch(() => {});
             }, 3000);
           } else {
+            await clearStoredSession();
             waState.status = "disconnected";
             waState.lastError = "Logged out from WhatsApp. Scan QR code again.";
             waState.initPromise = null;
+            if (!waState.isLoggingOut) {
+              setTimeout(() => {
+                initWhatsApp().catch(() => {});
+              }, 2000);
+            }
           }
         }
       });
@@ -315,6 +354,7 @@ app.post("/api/send", requireAuth, async (req, res) => {
       }
     }
 
+    scheduleSessionSync(1500);
     return res.json({ success: true });
   } catch (err) {
     console.error("[WhatsApp Bot] Error sending message:", err);
@@ -334,17 +374,7 @@ app.post("/api/logout", requireAuth, async (req, res) => {
       waState.sock = null;
     }
 
-    // Clean local auth dir
-    try {
-      await fsPromises.rm(AUTH_DIR, { recursive: true, force: true });
-    } catch {}
-
-    // Clean Supabase session table
-    if (supabase) {
-      try {
-        await supabase.from("whatsapp_sessions").delete().neq("id", "");
-      } catch {}
-    }
+    await clearStoredSession();
 
     waState.status = "disconnected";
     waState.qrDataUrl = null;

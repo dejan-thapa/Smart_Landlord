@@ -308,33 +308,40 @@ export default function ReminderModal({
           {/* WhatsApp Connection Status Card */}
           {waStatus !== "connected" && (
             <div className="bg-white dark:bg-slate-800/90 border border-emerald-200 dark:border-emerald-800 rounded-2xl p-4 space-y-3 shadow-xs">
-              <div className="flex items-center gap-2">
-                <QrCode size={18} className="text-[#25D366] shrink-0" />
-                <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Link Your WhatsApp (24/7 Auto-Send)
-                </h4>
-              </div>
-              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                Open WhatsApp on your phone → <strong>Linked Devices</strong> →{" "}
-                <strong>Link a Device</strong> → Scan this QR code to enable 1-click delivery of both the Bill Card and eSewa QR directly to your tenants.
-              </p>
-              <div className="flex flex-col items-center justify-center py-2">
-                {qrDataUrl ? (
-                  <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={qrDataUrl}
-                      alt="WhatsApp Link QR Code"
-                      className="w-52 h-52 object-contain"
-                    />
+              {qrDataUrl ? (
+                <>
+                  <div className="flex items-center gap-2">
+                    <QrCode size={18} className="text-[#25D366] shrink-0" />
+                    <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                      Link Your WhatsApp (One-Time Setup)
+                    </h4>
                   </div>
-                ) : (
-                  <div className="w-52 h-52 rounded-2xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center gap-2 text-slate-500 dark:text-slate-400">
-                    <Loader2 size={24} className="animate-spin text-[#25D366]" />
-                    <span className="text-xs font-medium">Connecting WhatsApp service…</span>
+                  <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                    Open Smart Landlord on a laptop/PC → Open WhatsApp on your phone → <strong>Linked Devices</strong> →{" "}
+                    <strong>Link a Device</strong> → Scan this QR code once for 1-click delivery of both the Bill Card and eSewa QR.
+                  </p>
+                  <div className="flex flex-col items-center justify-center py-2">
+                    <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={qrDataUrl}
+                        alt="WhatsApp Link QR Code"
+                        className="w-52 h-52 object-contain"
+                      />
+                    </div>
                   </div>
-                )}
-              </div>
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-4 gap-2.5 text-center">
+                  <Loader2 size={24} className="animate-spin text-[#25D366]" />
+                  <p className="text-sm font-bold text-slate-900 dark:text-white">
+                    Waking up Cloud WhatsApp Bot…
+                  </p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs">
+                    Restoring your linked WhatsApp session. Once connected, this bill will send automatically.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 

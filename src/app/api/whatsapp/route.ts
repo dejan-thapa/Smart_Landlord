@@ -12,20 +12,30 @@ const BOT_URL = process.env.WHATSAPP_BOT_URL ? process.env.WHATSAPP_BOT_URL.repl
 const BOT_API_KEY = process.env.BOT_API_KEY || "smart-landlord-secret-key";
 
 export async function GET() {
-  // If cloud bot microservice is configured (e.g. on Render / Railway), proxy to it
+  // If cloud bot microservice is configured (e.g. on Render / Railway), proxy strictly to it.
+  // Never fall back to local serverless Baileys when BOT_URL is configured (that would generate a throwaway QR).
   if (BOT_URL) {
     try {
       const res = await fetch(`${BOT_URL}/api/status`, {
         headers: { "x-api-key": BOT_API_KEY },
         cache: "no-store",
+        signal: AbortSignal.timeout(25000),
       });
       if (res.ok) {
         const json = await res.json();
         return NextResponse.json(json);
       }
     } catch (err) {
-      console.warn("Cloud bot unreachable, falling back to local:", err);
+      console.warn("Cloud bot waking up or unreachable:", err);
     }
+
+    return NextResponse.json({
+      status: "connecting",
+      qrDataUrl: null,
+      userPhone: null,
+      lastError: null,
+      wakingUp: true,
+    });
   }
 
   try {
@@ -49,7 +59,7 @@ export async function POST(req: Request) {
     const body = await req.json();
     const action = body?.action || "send";
 
-    // Proxy to Cloud Bot if configured
+    // Proxy strictly to Cloud Bot if configured
     if (BOT_URL) {
       try {
         const targetEndpoint = action === "logout" ? `${BOT_URL}/api/logout` : `${BOT_URL}/api/send`;
@@ -60,11 +70,20 @@ export async function POST(req: Request) {
             "x-api-key": BOT_API_KEY,
           },
           body: JSON.stringify(body),
+          signal: AbortSignal.timeout(30000),
         });
         const json = await res.json();
         return NextResponse.json(json, { status: res.status });
       } catch (err) {
-        console.warn("Cloud bot failed, falling back to local:", err);
+        console.warn("Cloud bot request failed while waking up:", err);
+        return NextResponse.json(
+          {
+            success: false,
+            wakingUp: true,
+            error: "Cloud WhatsApp bot is waking up. Please wait a few seconds and try again.",
+          },
+          { status: 503 }
+        );
       }
     }
 

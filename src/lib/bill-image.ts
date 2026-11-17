@@ -364,36 +364,49 @@ export async function sendBillViaWhatsApp(
     }
   }
 
-  // 2. Check 24/7 Cloud WhatsApp Bot (or local bot)
+  // 2. Check 24/7 Cloud WhatsApp Bot (wait briefly if Render free tier is waking up)
   try {
-    const statusRes = await fetch("/api/whatsapp", { cache: "no-store" });
-    if (statusRes.ok) {
-      const statusJson = await statusRes.json();
-      if (statusJson.status === "connected") {
-        const { base64 } = await generateBillCardPng(data);
-        const nepaliMonth = formatNepaliMonth(data.billingMonth);
-        const caption =
-          `Here is your rent bill statement for *${nepaliMonth}* (*Room ${data.roomNo}*):\n\n` +
-          `*Total Due: Rs. ${Number(data.totalDue).toLocaleString()}*`;
+    let statusJson: { status?: string } | null = null;
+    const maxAttempts = 8; // ~20s max wait for cold-start wake-up
 
-        const res = await fetch("/api/whatsapp", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "send",
-            phone: data.phoneNumber,
-            imageBase64: base64,
-            caption,
-            sendCompanionQr: true,
-            amount: Number(data.totalDue),
-          }),
-        });
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const statusRes = await fetch("/api/whatsapp", { cache: "no-store" });
+      if (!statusRes.ok) break;
+      statusJson = await statusRes.json();
 
-        if (res.ok) {
-          const json = await res.json();
-          if (json.success) {
-            return { sent: true, needsModal: false };
-          }
+      if (statusJson?.status === "connected" || statusJson?.status === "qr_ready") {
+        break;
+      }
+
+      if (attempt < maxAttempts - 1) {
+        await new Promise((r) => setTimeout(r, 2500));
+      }
+    }
+
+    if (statusJson?.status === "connected") {
+      const { base64 } = await generateBillCardPng(data);
+      const nepaliMonth = formatNepaliMonth(data.billingMonth);
+      const caption =
+        `Here is your rent bill statement for *${nepaliMonth}* (*Room ${data.roomNo}*):\n\n` +
+        `*Total Due: Rs. ${Number(data.totalDue).toLocaleString()}*`;
+
+      const res = await fetch("/api/whatsapp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "send",
+          phone: data.phoneNumber,
+          imageBase64: base64,
+          caption,
+          sendCompanionQr: true,
+          amount: Number(data.totalDue),
+        }),
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success) {
+          return { sent: true, needsModal: false };
         }
       }
     }
