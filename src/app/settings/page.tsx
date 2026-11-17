@@ -59,15 +59,15 @@ export default function SettingsPage() {
     e.preventDefault();
     startTransition(async () => {
       const payload = {
-        name: form.name || null,
+        name: form.name.trim() || null,
         room_no: form.room_no,
         room_side: form.room_side,
         base_rent: Number(form.base_rent),
         water_rate: Number(form.water_rate),
         wifi_rate: Number(form.wifi_rate),
         garbage_rate: Number(form.garbage_rate),
-        email: form.email || undefined,
-        phone_number: form.phone_number || undefined,
+        email: form.email.trim() || null,
+        phone_number: form.phone_number.trim() || null,
       };
 
       try {

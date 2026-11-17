@@ -22,8 +22,8 @@ export async function addTenant(data: {
   room_no: string;
   room_side: string;
   base_rent: number;
-  email?: string;
-  phone_number?: string;
+  email?: string | null;
+  phone_number?: string | null;
   water_rate: number;
   wifi_rate: number;
   garbage_rate: number;
@@ -32,6 +32,8 @@ export async function addTenant(data: {
     const { error } = await supabase.from("tenants").insert(data);
     if (error) return { success: false, error: error.message };
     revalidatePath("/settings");
+    revalidatePath("/invoices");
+    revalidatePath("/");
     return { success: true };
   } catch (err) {
     console.error("addTenant error:", err);
@@ -47,8 +49,8 @@ export async function editTenant(id: string, data: {
   room_no: string;
   room_side: string;
   base_rent: number;
-  email?: string;
-  phone_number?: string;
+  email?: string | null;
+  phone_number?: string | null;
   water_rate: number;
   wifi_rate: number;
   garbage_rate: number;
@@ -57,6 +59,8 @@ export async function editTenant(id: string, data: {
     const { error } = await supabase.from("tenants").update(data).eq("id", id);
     if (error) return { success: false, error: error.message };
     revalidatePath("/settings");
+    revalidatePath("/invoices");
+    revalidatePath("/");
     return { success: true };
   } catch (err) {
     console.error("editTenant error:", err);
