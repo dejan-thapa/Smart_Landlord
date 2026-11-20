@@ -32,6 +32,7 @@ function MeterInputContent() {
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<Toast>(null);
   const [isPending, startTransition] = useTransition();
+  const [generatingRoomId, setGeneratingRoomId] = useState<string | null>(null);
 
   const load = () => {
     fetchMeterData().then(({ rooms: r, currentMonth: m }) => {
@@ -95,18 +96,27 @@ function MeterInputContent() {
     });
   };
 
-  const handleGenerateInvoice = (tenantId: string, roomNo: string, currentVal?: number, prevVal?: number) => {
-    startTransition(async () => {
+  const handleGenerateInvoice = async (tenantId: string, roomNo: string, currentVal?: number, prevVal?: number) => {
+    setGeneratingRoomId(tenantId);
+    try {
       const readingVal = currentVal !== undefined ? currentVal : (readings[tenantId] ? Number(readings[tenantId]) : undefined);
       const prevReadingVal = prevVal !== undefined ? prevVal : Number(prevReadings[tenantId] || 0);
       const result = await generateInvoiceForRoom(tenantId, currentMonth, readingVal, Number(ratePerUnit || 12), prevReadingVal);
       if (result.success) {
         showToast({ type: "success", message: `Bill generated for Room ${roomNo}!` });
-        load();
+        setRooms((prev) =>
+          prev.map((r) =>
+            r.id === tenantId
+              ? { ...r, has_invoice: true, current_reading: readingVal ?? r.current_reading, last_reading: prevReadingVal }
+              : r
+          )
+        );
       } else {
         showToast({ type: "error", message: result.error || "Failed to generate bill." });
       }
-    });
+    } finally {
+      setGeneratingRoomId(null);
+    }
   };
 
   const monthLabel = (() => {
@@ -211,7 +221,8 @@ function MeterInputContent() {
                   setPrevReadings={setPrevReadings}
                   readings={readings} 
                   setReadings={setReadings} 
-                  isPending={isPending} 
+                  isGenerating={generatingRoomId === room.id}
+                  isBusy={isPending || generatingRoomId !== null}
                   ratePerUnit={ratePerUnit} 
                   onGenerateInvoice={handleGenerateInvoice} 
                 />
@@ -236,7 +247,8 @@ function MeterInputContent() {
                   setPrevReadings={setPrevReadings}
                   readings={readings} 
                   setReadings={setReadings} 
-                  isPending={isPending} 
+                  isGenerating={generatingRoomId === room.id}
+                  isBusy={isPending || generatingRoomId !== null}
                   ratePerUnit={ratePerUnit} 
                   onGenerateInvoice={handleGenerateInvoice} 
                 />
@@ -258,7 +270,8 @@ function MeterInputContent() {
                     setPrevReadings={setPrevReadings}
                     readings={readings} 
                     setReadings={setReadings} 
-                    isPending={isPending} 
+                    isGenerating={generatingRoomId === room.id}
+                    isBusy={isPending || generatingRoomId !== null}
                     ratePerUnit={ratePerUnit} 
                     onGenerateInvoice={handleGenerateInvoice} 
                   />
@@ -302,7 +315,8 @@ function RoomMeterCard({
   setPrevReadings,
   readings, 
   setReadings, 
-  isPending, 
+  isGenerating, 
+  isBusy,
   ratePerUnit, 
   onGenerateInvoice 
 }: { 
@@ -311,7 +325,8 @@ function RoomMeterCard({
   setPrevReadings: React.Dispatch<React.SetStateAction<{ [key: string]: string }>>;
   readings: { [key: string]: string }; 
   setReadings: React.Dispatch<React.SetStateAction<{ [key: string]: string }>>; 
-  isPending: boolean; 
+  isGenerating: boolean; 
+  isBusy: boolean;
   ratePerUnit: string; 
   onGenerateInvoice: (id: string, roomNo: string, currentVal?: number, prevVal?: number) => void;
 }) {
@@ -421,14 +436,14 @@ function RoomMeterCard({
         <button
           type="button"
           onClick={() => onGenerateInvoice(room.id, room.room_no, currentNum !== null ? currentNum : undefined, prevNum)}
-          disabled={isPending || isLowerThanPrev || (!room.has_invoice && currentNum === null)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+          disabled={isBusy || isLowerThanPrev || (!room.has_invoice && currentNum === null)}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer disabled:opacity-50 ${
             room.has_invoice 
               ? "text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700" 
               : "text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/50 border border-teal-200 dark:border-teal-800 hover:bg-teal-100 dark:hover:bg-teal-900/50"
           }`}
         >
-          {isPending ? (
+          {isGenerating ? (
             <Loader2 size={14} className="animate-spin" />
           ) : room.has_invoice ? (
             <><RefreshCcw size={12} /> Regenerate Bill</>
