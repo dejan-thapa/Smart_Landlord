@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { supabaseAdmin, supabase } from "@/lib/supabase";
 
 export type Expense = {
   id: string;
@@ -11,42 +12,32 @@ export type Expense = {
   created_at: string;
 };
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+// Use supabaseAdmin on server to bypass schema cache & RLS, fallback to supabase
+const getClient = () => supabaseAdmin || supabase;
 
-// Helper for direct REST API calls — bypasses PostgREST schema cache
-async function dbFetch(path: string, options: RequestInit = {}) {
-  const url = `${SUPABASE_URL}/rest/v1/${path}`;
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      "apikey": SUPABASE_KEY,
-      "Authorization": `Bearer ${SUPABASE_KEY}`,
-      "Content-Type": "application/json",
-      "Prefer": "return=representation",
-      ...options.headers,
-    },
-    cache: "no-store",
-  });
-  return res;
-}
+export async function fetchExpenses(month: string): Promise<Expense[]> {
+  try {
+    const [year, mo] = month.split("-").map(Number);
+    const lastDay = new Date(year, mo, 0).getDate();
+    const startOfMonth = `${month}-01`;
+    const endOfMonth = `${month}-${String(lastDay).padStart(2, "0")}`;
 
-export async function fetchExpenses(month: string) {
-  const [year, mo] = month.split("-").map(Number);
-  const lastDay = new Date(year, mo, 0).getDate();
-  const startOfMonth = `${month}-01`;
-  const endOfMonth = `${month}-${String(lastDay).padStart(2, "0")}`;
+    const { data, error } = await getClient()
+      .from("expenses")
+      .select("*")
+      .gte("expense_date", startOfMonth)
+      .lte("expense_date", endOfMonth)
+      .order("expense_date", { ascending: false });
 
-  const res = await dbFetch(
-    `expenses?expense_date=gte.${startOfMonth}&expense_date=lte.${endOfMonth}&order=expense_date.desc`
-  );
-
-  if (!res.ok) {
-    const err = await res.text();
-    console.error("Error fetching expenses:", err);
+    if (error) {
+      console.error("fetchExpenses error:", error);
+      return [];
+    }
+    return (data || []) as Expense[];
+  } catch (err) {
+    console.error("fetchExpenses exception:", err);
     return [];
   }
-  return res.json() as Promise<Expense[]>;
 }
 
 export async function addExpense(data: {
@@ -55,49 +46,87 @@ export async function addExpense(data: {
   category: string;
   expense_date: string;
 }) {
-  const res = await dbFetch("expenses", {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) {
-    const err = await res.text();
-    console.error("Add expense error:", err);
-    return { success: false, error: err };
+  try {
+    const { error } = await getClient().from("expenses").insert([
+      {
+        description: data.description.trim(),
+        amount: Number(data.amount),
+        category: data.category,
+        expense_date: data.expense_date,
+      },
+    ]);
+
+    if (error) {
+      console.error("Add expense error:", error);
+      return { success: false, error: error.message };
+    }
+
+    revalidatePath("/expenses");
+    revalidatePath("/");
+    return { success: true };
+  } catch (err) {
+    console.error("Add expense exception:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to add expense",
+    };
   }
-  revalidatePath("/expenses");
-  revalidatePath("/");
-  return { success: true };
 }
 
-export async function editExpense(id: string, data: {
-  description: string;
-  amount: number;
-  category: string;
-  expense_date: string;
-}) {
-  const res = await dbFetch(`expenses?id=eq.${id}`, {
-    method: "PATCH",
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) {
-    const err = await res.text();
-    return { success: false, error: err };
+export async function editExpense(
+  id: string,
+  data: {
+    description: string;
+    amount: number;
+    category: string;
+    expense_date: string;
   }
-  revalidatePath("/expenses");
-  revalidatePath("/");
-  return { success: true };
+) {
+  try {
+    const { error } = await getClient()
+      .from("expenses")
+      .update({
+        description: data.description.trim(),
+        amount: Number(data.amount),
+        category: data.category,
+        expense_date: data.expense_date,
+      })
+      .eq("id", id);
+
+    if (error) {
+      console.error("Edit expense error:", error);
+      return { success: false, error: error.message };
+    }
+
+    revalidatePath("/expenses");
+    revalidatePath("/");
+    return { success: true };
+  } catch (err) {
+    console.error("Edit expense exception:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to update expense",
+    };
+  }
 }
 
 export async function deleteExpense(id: string) {
-  const res = await dbFetch(`expenses?id=eq.${id}`, {
-    method: "DELETE",
-    headers: { "Prefer": "" },
-  });
-  if (!res.ok) {
-    const err = await res.text();
-    return { success: false, error: err };
+  try {
+    const { error } = await getClient().from("expenses").delete().eq("id", id);
+
+    if (error) {
+      console.error("Delete expense error:", error);
+      return { success: false, error: error.message };
+    }
+
+    revalidatePath("/expenses");
+    revalidatePath("/");
+    return { success: true };
+  } catch (err) {
+    console.error("Delete expense exception:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to delete expense",
+    };
   }
-  revalidatePath("/expenses");
-  revalidatePath("/");
-  return { success: true };
 }
