@@ -27,7 +27,7 @@ import ReceiptModal from "./ReceiptModal";
 import ReminderModal from "@/components/ReminderModal";
 import { InvoiceReminderData } from "@/lib/reminder-utils";
 import { sendBillViaWhatsApp } from "@/lib/bill-image";
-import { getInvoicePreviousBalance } from "@/lib/types";
+import { getInvoicePreviousBalance, getInvoiceAmountPaid, getInvoiceBalance } from "@/lib/types";
 import { PaymentRecord, recordPaymentAction, revertPaymentAction } from "./actions";
 
 function formatNepaliMonthLabel(billingMonth: string): string {
@@ -155,15 +155,16 @@ export default function PaymentsView({ initialPayments, month }: PaymentsViewPro
     const paidList = initialPayments.filter((p) => p.payment_status === "paid");
     const unpaidList = initialPayments.filter((p) => p.payment_status === "unpaid");
 
-    const totalCollected = paidList.reduce((sum, p) => sum + Number(p.total_due || 0), 0);
-    const totalOutstanding = unpaidList.reduce((sum, p) => sum + Number(p.total_due || 0), 0);
+    // Collected = money actually received (includes partial payments on unpaid bills)
+    const totalCollected = initialPayments.reduce((sum, p) => sum + getInvoiceAmountPaid(p), 0);
+    const totalOutstanding = unpaidList.reduce((sum, p) => sum + getInvoiceBalance(p), 0);
     const totalBilled = totalCollected + totalOutstanding;
     const collectionRate = totalBilled > 0 ? Math.round((totalCollected / totalBilled) * 100) : 0;
 
     // Method breakdowns
-    const byMethod = paidList.reduce((acc, p) => {
+    const byMethod = initialPayments.filter((p) => getInvoiceAmountPaid(p) > 0).reduce((acc, p) => {
       const m = p.payment_method || "cash";
-      acc[m] = (acc[m] || 0) + Number(p.total_due || 0);
+      acc[m] = (acc[m] || 0) + getInvoiceAmountPaid(p);
       return acc;
     }, {} as Record<string, number>);
 

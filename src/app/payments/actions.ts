@@ -8,6 +8,7 @@ export interface PaymentRecord {
   tenant_id: string;
   billing_month: string;
   total_due: number;
+  amount_paid?: number | null;
   rent_amount?: number;
   electricity_cost?: number;
   water_share?: number;
@@ -63,15 +64,25 @@ export async function recordPaymentAction(
     payment_notes?: string;
   }
 ) {
-  const { error } = await supabase
+  const { data: inv } = await supabase.from("invoices").select("total_due").eq("id", invoiceId).single();
+  const updateData: Record<string, unknown> = {
+    payment_status: "paid",
+    payment_date: details.payment_date,
+    payment_method: details.payment_method,
+    payment_notes: details.payment_notes?.trim() || null,
+  };
+  if (inv) updateData.amount_paid = Number(inv.total_due || 0);
+
+  let { error } = await supabase
     .from("invoices")
-    .update({
-      payment_status: "paid",
-      payment_date: details.payment_date,
-      payment_method: details.payment_method,
-      payment_notes: details.payment_notes?.trim() || null,
-    })
+    .update(updateData)
     .eq("id", invoiceId);
+
+  if (error && error.code === "PGRST204") {
+    delete updateData.amount_paid;
+    const res = await supabase.from("invoices").update(updateData).eq("id", invoiceId);
+    error = res.error;
+  }
 
   if (error) {
     return { success: false, error: error.message };
@@ -85,15 +96,23 @@ export async function recordPaymentAction(
 }
 
 export async function revertPaymentAction(invoiceId: string) {
-  const { error } = await supabase
+  const resetData: Record<string, unknown> = {
+    payment_status: "unpaid",
+    payment_date: null,
+    payment_method: null,
+    payment_notes: null,
+    amount_paid: 0,
+  };
+  let { error } = await supabase
     .from("invoices")
-    .update({
-      payment_status: "unpaid",
-      payment_date: null,
-      payment_method: null,
-      payment_notes: null,
-    })
+    .update(resetData)
     .eq("id", invoiceId);
+
+  if (error && error.code === "PGRST204") {
+    delete resetData.amount_paid;
+    const res = await supabase.from("invoices").update(resetData).eq("id", invoiceId);
+    error = res.error;
+  }
 
   if (error) {
     return { success: false, error: error.message };

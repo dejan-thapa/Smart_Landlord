@@ -40,15 +40,21 @@ function PaymentModal({
   onConfirm,
   onCancel,
   isPending,
+  balanceDue,
 }: {
-  onConfirm: (details: { payment_date: string; payment_method: PaymentMethod; payment_notes: string }) => void;
+  onConfirm: (details: { payment_date: string; payment_method: PaymentMethod; payment_notes: string; amount: number }) => void;
   onCancel: () => void;
   isPending: boolean;
+  balanceDue: number;
 }) {
   const today = new Date().toISOString().slice(0, 10);
   const [paymentDate, setPaymentDate] = useState(today);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [paymentNotes, setPaymentNotes] = useState("");
+  const [amountInput, setAmountInput] = useState(String(balanceDue));
+  const amount = parseFloat(amountInput) || 0;
+  const isPartialAmount = amount > 0 && amount < balanceDue - 0.01;
+  const remainingAfter = Math.max(0, balanceDue - amount);
 
   return (
     <>
@@ -83,6 +89,43 @@ function PaymentModal({
           </div>
 
           <div className="px-6 py-5 space-y-5">
+            {/* Amount Received */}
+            <div>
+              <label htmlFor="payment-amount-input" className="flex items-center gap-1.5 text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                <Banknote size={12} aria-hidden="true" />
+                Amount Received
+              </label>
+              <div className="flex gap-2">
+                <input
+                  id="payment-amount-input"
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  value={amountInput}
+                  onChange={(e) => setAmountInput(e.target.value)}
+                  className="flex-1 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold font-mono text-slate-900 focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition-all bg-slate-50"
+                />
+                <button
+                  type="button"
+                  onClick={() => setAmountInput(String(balanceDue))}
+                  className="px-3 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                >
+                  Full
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAmountInput(String(Math.round(balanceDue / 2)))}
+                  className="px-3 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                >
+                  Half
+                </button>
+              </div>
+              <p className={`text-[11px] font-medium mt-1.5 ${isPartialAmount ? "text-orange-600" : "text-slate-500"}`}>
+                {isPartialAmount
+                  ? `Partial payment · Rs.${remainingAfter.toLocaleString()} will remain due`
+                  : `Balance due: Rs.${balanceDue.toLocaleString()}`}
+              </p>
+            </div>
             {/* Payment Date */}
             <div>
               <label htmlFor="payment-date-input" className="flex items-center gap-1.5 text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
@@ -152,14 +195,14 @@ function PaymentModal({
               Cancel
             </button>
             <button
-              onClick={() => onConfirm({ payment_date: paymentDate, payment_method: paymentMethod, payment_notes: paymentNotes })}
-              disabled={isPending || !paymentDate}
+              onClick={() => onConfirm({ payment_date: paymentDate, payment_method: paymentMethod, payment_notes: paymentNotes, amount })}
+              disabled={isPending || !paymentDate || amount <= 0}
               className="flex-1 py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all disabled:opacity-60"
             >
               {isPending ? (
                 <><Loader2 size={16} className="animate-spin" /> Saving...</>
               ) : (
-                <><CheckCircle2 size={16} /> Confirm Payment</>
+                <><CheckCircle2 size={16} /> {isPartialAmount ? "Record Partial" : "Confirm Payment"}</>
               )}
             </button>
           </div>
@@ -172,10 +215,14 @@ function PaymentModal({
 export default function InvoiceActions({
   invoiceId,
   isPaid,
+  balanceDue,
+  isPartial = false,
   reminderData,
 }: {
   invoiceId: string;
   isPaid: boolean;
+  balanceDue: number;
+  isPartial?: boolean;
   reminderData?: InvoiceReminderData;
 }) {
   const [isPending, startTransition] = useTransition();
@@ -190,12 +237,13 @@ export default function InvoiceActions({
   const [showReminderModal, setShowReminderModal] = useState(false);
   const router = useRouter();
 
-  const handleMarkPaid = (details: { payment_date: string; payment_method: PaymentMethod; payment_notes: string }) => {
+  const handleMarkPaid = (details: { payment_date: string; payment_method: PaymentMethod; payment_notes: string; amount: number }) => {
     startTransition(async () => {
       const result = await markInvoicePaid(invoiceId, {
         payment_date: details.payment_date,
         payment_method: details.payment_method,
         payment_notes: details.payment_notes,
+        amount: details.amount,
       });
       if (result.success) {
         setShowPaymentModal(false);
@@ -288,6 +336,7 @@ export default function InvoiceActions({
           onConfirm={handleMarkPaid}
           onCancel={() => setShowPaymentModal(false)}
           isPending={isPending}
+          balanceDue={balanceDue}
         />
       )}
 
@@ -348,7 +397,7 @@ export default function InvoiceActions({
               ) : isPaid ? (
                 <><RotateCcw size={15} /> Re-open</>
               ) : (
-                <><CheckCircle2 size={15} /> Mark Paid</>
+                <><CheckCircle2 size={15} /> {isPartial ? "Add Payment" : "Mark Paid"}</>
               )}
             </button>
 

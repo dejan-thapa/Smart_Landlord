@@ -6,14 +6,18 @@ import { ChevronRight, MessageSquare, Mail, CheckCircle2, Clock, Loader2 } from 
 import ReminderModal from "@/components/ReminderModal";
 import { InvoiceReminderData } from "@/lib/reminder-utils";
 import { sendBillViaWhatsApp } from "@/lib/bill-image";
-import { getInvoicePreviousBalance, type InvoiceWithTenant } from "@/lib/types";
+import { getInvoicePreviousBalance, getInvoiceBalance, isInvoicePartial, type InvoiceWithTenant } from "@/lib/types";
 
-function StatusBadge({ status, emailedAt }: { status: string; emailedAt?: string | null }) {
+function StatusBadge({ status, emailedAt, isPartial }: { status: string; emailedAt?: string | null; isPartial?: boolean }) {
   return (
     <div className="flex items-center gap-2">
       {status === "paid" ? (
         <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-700 text-xs font-bold px-2 py-1 rounded-full">
           <CheckCircle2 size={12} /> Paid
+        </span>
+      ) : isPartial ? (
+        <span className="inline-flex items-center gap-1 bg-orange-100 text-orange-700 text-xs font-bold px-2 py-1 rounded-full">
+          <Clock size={12} /> Partial
         </span>
       ) : (
         <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-700 text-xs font-bold px-2 py-1 rounded-full">
@@ -37,6 +41,8 @@ export default function InvoiceCardItem({ inv }: { inv: InvoiceWithTenant }) {
   const tenant = inv.tenants;
   const isUnpaid = inv.payment_status === "unpaid";
   const previousBalance = getInvoicePreviousBalance(inv);
+  const isPartial = isInvoicePartial(inv);
+  const balanceDue = getInvoiceBalance(inv);
 
   const reminderData: InvoiceReminderData = {
     tenantName: tenant?.name || "",
@@ -65,7 +71,7 @@ export default function InvoiceCardItem({ inv }: { inv: InvoiceWithTenant }) {
             </div>
             <div className="flex items-center gap-2">
               <span className="text-xs text-slate-400 font-medium">Room {tenant?.room_no}</span>
-              <StatusBadge status={inv.payment_status} emailedAt={inv.last_emailed_at} />
+              <StatusBadge status={inv.payment_status} emailedAt={inv.last_emailed_at} isPartial={isPartial} />
             </div>
           </Link>
 
@@ -123,6 +129,11 @@ export default function InvoiceCardItem({ inv }: { inv: InvoiceWithTenant }) {
                 {previousBalance > 0 && (
                   <p className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1 py-0.2 rounded border border-amber-200/70 inline-block mt-0.5">
                     +Rs.{previousBalance.toLocaleString()} Arrears
+                  </p>
+                )}
+                {isPartial && (
+                  <p className="text-[10px] font-bold text-orange-700 bg-orange-50 px-1 rounded border border-orange-200/70 block mt-0.5">
+                    Rs.{balanceDue.toLocaleString()} left
                   </p>
                 )}
               </div>

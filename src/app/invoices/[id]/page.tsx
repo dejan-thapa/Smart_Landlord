@@ -7,7 +7,7 @@ import PaymentQR from "./PaymentQR";
 import PreviousBalanceEditor from "./PreviousBalanceEditor";
 import NepaliDate from "nepali-date-converter";
 import { supabase } from "@/lib/supabase";
-import { getInvoicePreviousBalance } from "@/lib/types";
+import { getInvoicePreviousBalance, getInvoiceAmountPaid, getInvoiceBalance, isInvoicePartial } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +19,9 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   const tenant = invoice.tenants;
   if (!tenant) notFound();
   const isPaid = invoice.payment_status === "paid";
+  const isPartial = isInvoicePartial(invoice);
+  const amountPaid = getInvoiceAmountPaid(invoice);
+  const balanceDue = getInvoiceBalance(invoice);
 
   const { data: meterReading } = await supabase
     .from("meter_readings")
@@ -80,6 +83,10 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
           {isPaid ? (
             <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-700 text-sm font-bold px-3 py-1.5 rounded-full">
               <CheckCircle2 size={14} /> Paid
+            </span>
+          ) : isPartial ? (
+            <span className="inline-flex items-center gap-1 bg-orange-100 text-orange-700 text-sm font-bold px-3 py-1.5 rounded-full">
+              <Clock size={14} /> Partial
             </span>
           ) : (
             <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-700 text-sm font-bold px-3 py-1.5 rounded-full">
@@ -149,7 +156,29 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             Rs. {Number(invoice.total_due).toLocaleString()}
           </span>
         </div>
+        {isPartial && (
+          <>
+            <div className="px-5 py-2.5 flex justify-between items-center border-t border-slate-200 bg-emerald-50/60">
+              <span className="text-sm font-semibold text-emerald-800">Paid so far</span>
+              <span className="font-bold font-mono text-emerald-700">− Rs. {amountPaid.toLocaleString()}</span>
+            </div>
+            <div className="px-5 py-3 flex justify-between items-center border-t border-orange-200 bg-orange-50">
+              <span className="font-bold text-orange-900">Balance Remaining</span>
+              <span className="text-xl font-bold font-mono text-orange-700">Rs. {balanceDue.toLocaleString()}</span>
+            </div>
+          </>
+        )}
       </div>
+
+      {/* Partial payment log */}
+      {isPartial && invoice.payment_notes && (
+        <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 mb-4">
+          <div className="flex items-center gap-1.5 text-[10px] uppercase font-bold text-orange-700 tracking-wider mb-1">
+            <StickyNote size={10} /> Payments Received
+          </div>
+          <p className="text-sm text-slate-700 whitespace-pre-line">{invoice.payment_notes}</p>
+        </div>
+      )}
 
       {/* Payment Details — shown when paid */}
       {isPaid && (
@@ -227,6 +256,8 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
       <InvoiceActions
         invoiceId={invoice.id}
         isPaid={isPaid}
+        balanceDue={balanceDue}
+        isPartial={isPartial}
         reminderData={{
           tenantName: tenant?.name || "",
           roomNo: tenant?.room_no || "",

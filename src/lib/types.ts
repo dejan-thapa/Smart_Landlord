@@ -25,6 +25,7 @@ export type Invoice = {
   electricity_cost: number;
   previous_balance?: number;
   total_due: number;
+  amount_paid?: number | null;
   payment_status: PaymentStatus;
   payment_date?: string | null;
   payment_method?: PaymentMethod | null;
@@ -83,4 +84,31 @@ export function getInvoicePreviousBalance(invoice: {
     Number(invoice.garbage_share || 0);
   const diff = Number(invoice.total_due || 0) - currentCharges;
   return diff > 0.01 ? Math.round(diff * 100) / 100 : 0;
+}
+
+type PaymentAmountFields = {
+  payment_status: string;
+  total_due: number;
+  amount_paid?: number | null;
+};
+
+/** Money actually received against a bill. Paid bills without amount_paid (pre-migration) count as fully paid. */
+export function getInvoiceAmountPaid(invoice: PaymentAmountFields): number {
+  if (invoice.payment_status === "paid") {
+    return invoice.amount_paid === undefined || invoice.amount_paid === null
+      ? Number(invoice.total_due || 0)
+      : Number(invoice.amount_paid);
+  }
+  return Number(invoice.amount_paid || 0);
+}
+
+/** Remaining amount still owed on a bill (0 once paid). */
+export function getInvoiceBalance(invoice: PaymentAmountFields): number {
+  if (invoice.payment_status === "paid") return 0;
+  return Math.max(0, Number(invoice.total_due || 0) - Number(invoice.amount_paid || 0));
+}
+
+/** A bill is partially paid when it is still unpaid but some money has been received. */
+export function isInvoicePartial(invoice: PaymentAmountFields): boolean {
+  return invoice.payment_status !== "paid" && Number(invoice.amount_paid || 0) > 0;
 }

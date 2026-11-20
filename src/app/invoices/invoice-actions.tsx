@@ -9,7 +9,7 @@ import { render } from "@react-email/render";
 import { InvoiceEmailTemplate } from "@/components/InvoiceEmailTemplate";
 import NepaliDate from "nepali-date-converter";
 import { ReactElement } from "react";
-import { getErrorMessage, normalizeTenant, getInvoicePreviousBalance, type InvoiceTenant, type InvoiceWithTenant } from "@/lib/types";
+import { getErrorMessage, normalizeTenant, getInvoicePreviousBalance, getInvoiceBalance, type InvoiceTenant, type InvoiceWithTenant } from "@/lib/types";
 
 export async function fetchInvoices(billingMonth: string): Promise<InvoiceWithTenant[]> {
   const { data, error } = await supabase
@@ -58,24 +58,75 @@ export async function markInvoicePaid(
     payment_date?: string;   // ISO date string YYYY-MM-DD
     payment_method?: string; // 'cash' | 'esewa' | 'bank_transfer' | 'cheque' | 'other'
     payment_notes?: string;
+    amount?: number;         // amount received now; omitted = full remaining balance
   }
 ) {
-  // Fetch current invoice to see tenant_id and billing_month
+  // Fetch current invoice (select * so a missing amount_paid column never breaks this)
   const { data: currentInv } = await supabase
     .from("invoices")
-    .select("tenant_id, billing_month, rent_amount, electricity_cost, water_share, wifi_share, garbage_share, total_due, previous_balance")
+    .select("*")
     .eq("id", id)
     .single();
 
-  const updateData: Record<string, unknown> = { payment_status: "paid" };
+  const totalDue = Number(currentInv?.total_due || 0);
+  const alreadyPaid = Number(currentInv?.amount_paid || 0);
+  const remaining = Math.max(0, totalDue - alreadyPaid);
+  const amountNow = details?.amount !== undefined ? Number(details.amount) : remaining;
+
+  if (currentInv && (!Number.isFinite(amountNow) || amountNow <= 0)) {
+    return { success: false, error: "Enter an amount greater than 0." };
+  }
+
+  const isFullPayment = !currentInv || alreadyPaid + amountNow >= totalDue - 0.01;
+
+  // Partial payment: keep bill unpaid, accumulate amount_paid, log it in notes
+  if (!isFullPayment) {
+    const payDate = details?.payment_date || new Date().toISOString().slice(0, 10);
+    const logLine = `Partial: Rs.${amountNow.toLocaleString()} (${(details?.payment_method || "other").replace("_", " ")}) on ${payDate}${details?.payment_notes ? ` - ${details.payment_notes}` : ""}`;
+    const { error: partialErr } = await supabase
+      .from("invoices")
+      .update({
+        amount_paid: alreadyPaid + amountNow,
+        payment_date: payDate,
+        payment_method: details?.payment_method || null,
+        payment_notes: currentInv.payment_notes ? `${currentInv.payment_notes}\n${logLine}` : logLine,
+      })
+      .eq("id", id);
+
+    if (partialErr) {
+      const msg = partialErr.code === "PGRST204"
+        ? "Partial payments need the amount_paid column. Run migration 202604120000_add_amount_paid.sql in Supabase."
+        : partialErr.message;
+      return { success: false, error: msg };
+    }
+
+    revalidatePath("/invoices");
+    revalidatePath(`/invoices/${id}`);
+    revalidatePath("/");
+    revalidatePath("/payments");
+    return { success: true, partial: true };
+  }
+
+  const updateData: Record<string, unknown> = { payment_status: "paid", amount_paid: totalDue };
   if (details?.payment_date) updateData.payment_date = details.payment_date;
   if (details?.payment_method) updateData.payment_method = details.payment_method;
-  if (details?.payment_notes !== undefined) updateData.payment_notes = details.payment_notes;
+  if (details?.payment_notes !== undefined) {
+    updateData.payment_notes = currentInv?.payment_notes && alreadyPaid > 0
+      ? `${currentInv.payment_notes}${details.payment_notes ? `\n${details.payment_notes}` : ""}`
+      : details.payment_notes;
+  }
 
-  const { error } = await supabase
+  let { error } = await supabase
     .from("invoices")
     .update(updateData)
     .eq("id", id);
+
+  // amount_paid column not migrated yet: fall back to legacy full-payment update
+  if (error && error.code === "PGRST204") {
+    delete updateData.amount_paid;
+    const res = await supabase.from("invoices").update(updateData).eq("id", id);
+    error = res.error;
+  }
 
   if (error) return { success: false, error: error.message };
 
@@ -162,10 +213,17 @@ export async function updateInvoicePreviousBalance(
 }
 
 export async function markInvoiceUnpaid(id: string) {
-  const { error } = await supabase
+  const resetData: Record<string, unknown> = { payment_status: "unpaid", payment_date: null, payment_method: null, payment_notes: null, amount_paid: 0 };
+  let { error } = await supabase
     .from("invoices")
-    .update({ payment_status: "unpaid", payment_date: null, payment_method: null, payment_notes: null })
+    .update(resetData)
     .eq("id", id);
+
+  if (error && error.code === "PGRST204") {
+    delete resetData.amount_paid;
+    const res = await supabase.from("invoices").update(resetData).eq("id", id);
+    error = res.error;
+  }
 
   if (error) return { success: false, error: error.message };
   revalidatePath("/invoices");
@@ -224,12 +282,13 @@ export async function generateInvoicesAction(currentMonth: string) {
     .select('id, tenant_id, previous_balance, total_due, rent_amount, electricity_cost, water_share, wifi_share, garbage_share')
     .eq('billing_month', currentMonth);
 
-  // Fetch all prior unpaid invoices for active tenants (billing_month < currentMonth)
-  const { data: allPriorUnpaid } = await supabase
+  // Fetch prior invoices (billing_month < currentMonth), newest first.
+  // Each bill already carries forward older arrears, so only the latest prior bill matters.
+  const { data: allPriorInvoices } = await supabase
     .from('invoices')
-    .select('id, tenant_id, total_due, billing_month')
+    .select('*')
     .lt('billing_month', currentMonth)
-    .eq('payment_status', 'unpaid');
+    .order('billing_month', { ascending: false });
 
   const invoicesToInsert = [];
 
@@ -252,9 +311,9 @@ export async function generateInvoicesAction(currentMonth: string) {
     if (existing) {
       previousBalance = getInvoicePreviousBalance(existing);
     } else {
-      // Auto-calculate sum of prior unpaid invoices for this tenant
-      const tenantPriorUnpaid = (allPriorUnpaid || []).filter((inv) => inv.tenant_id === tenant.id);
-      previousBalance = tenantPriorUnpaid.reduce((sum, inv) => sum + Number(inv.total_due || 0), 0);
+      // Arrears = remaining balance of the latest prior bill (it already includes older arrears; partial payments deducted)
+      const latestPrior = (allPriorInvoices || []).find((inv) => inv.tenant_id === tenant.id);
+      previousBalance = latestPrior ? getInvoiceBalance(latestPrior) : 0;
     }
 
     const totalDue = currentCharges + previousBalance;

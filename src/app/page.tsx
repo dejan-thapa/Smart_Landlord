@@ -13,7 +13,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import MonthSelector from "@/components/MonthSelector";
 import NepaliDate from "nepali-date-converter";
-import { normalizeTenant, type InvoiceTenant, type InvoiceWithTenant, getInvoicePreviousBalance } from "@/lib/types";
+import { normalizeTenant, type InvoiceTenant, type InvoiceWithTenant, getInvoicePreviousBalance, getInvoiceAmountPaid } from "@/lib/types";
 import { normalizePhoneNumber, buildWhatsAppBillMessage } from "@/lib/reminder-utils";
 
 export const dynamic = "force-dynamic";
@@ -78,7 +78,7 @@ async function getDashboardData(month: string) {
   const billsOverdue = overdueInvoices.length;
 
   const totalAmountBilled = invoices.reduce((sum, inv) => sum + Number(inv.total_due || 0), 0);
-  const totalAmountCollected = paidInvoices.reduce((sum, inv) => sum + Number(inv.total_due || 0), 0);
+  const totalAmountCollected = invoices.reduce((sum, inv) => sum + getInvoiceAmountPaid(inv), 0);
   const totalOutstanding = totalAmountBilled - totalAmountCollected;
 
   return {

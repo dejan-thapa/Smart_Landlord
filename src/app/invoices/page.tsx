@@ -5,7 +5,7 @@ import NepaliDate from "nepali-date-converter";
 import BulkEmailButton from "./BulkEmailButton";
 import MonthSelector from "@/components/MonthSelector";
 import InvoiceCardItem from "./InvoiceCardItem";
-import type { InvoiceWithTenant } from "@/lib/types";
+import { getInvoiceAmountPaid, type InvoiceWithTenant } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +47,7 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
   const invoices = await fetchInvoices(month);
 
   const totalDue = invoices.reduce((sum, inv) => sum + Number(inv.total_due), 0);
-  const totalPaid = invoices.filter((i) => i.payment_status === "paid").reduce((sum, inv) => sum + Number(inv.total_due), 0);
+  const totalPaid = invoices.reduce((sum, inv) => sum + getInvoiceAmountPaid(inv), 0);
   const unpaidCount = invoices.filter((i) => i.payment_status === "unpaid").length;
 
   const unpaidWithEmail = invoices.filter(

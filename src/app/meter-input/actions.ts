@@ -2,7 +2,7 @@
 
 import { supabase } from "@/lib/supabase";
 import { revalidatePath } from "next/cache";
-import { getInvoicePreviousBalance } from "@/lib/types";
+import { getInvoicePreviousBalance, getInvoiceBalance } from "@/lib/types";
 
 export async function fetchMeterData() {
   const now = new Date();
@@ -196,13 +196,16 @@ export async function generateInvoiceForRoom(
   if (existingInvoice) {
     previousBalance = getInvoicePreviousBalance(existingInvoice);
   } else {
-    const { data: priorUnpaid } = await supabase
+    // Latest prior bill already carries older arrears forward, so only use it (if still unpaid)
+    const { data: latestPrior } = await supabase
       .from('invoices')
-      .select('total_due')
+      .select('*')
       .eq('tenant_id', tenantId)
       .lt('billing_month', currentMonth)
-      .eq('payment_status', 'unpaid');
-    previousBalance = (priorUnpaid || []).reduce((sum, inv) => sum + Number(inv.total_due || 0), 0);
+      .order('billing_month', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    previousBalance = latestPrior ? getInvoiceBalance(latestPrior) : 0;
   }
 
   const totalDue = 
