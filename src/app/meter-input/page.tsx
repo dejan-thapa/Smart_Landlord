@@ -122,7 +122,7 @@ function MeterInputContent() {
   const monthLabel = (() => {
     if (!currentMonth) return "";
     try {
-      return new NepaliDate(new Date(currentMonth + "-15")).format("MMMM YYYY");
+      return new NepaliDate(new Date(currentMonth + "-25")).format("MMMM YYYY");
     } catch {
       return currentMonth;
     }

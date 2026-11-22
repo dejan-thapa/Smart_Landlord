@@ -10,7 +10,7 @@ import {
 import { Expense, fetchExpenses } from "./actions";
 import MonthlyLedger from "./MonthlyLedger";
 import LogView from "./LogView";
-import QuickAdd from "./QuickAdd";
+import QuickAdd, { getNepalTodayDate } from "./QuickAdd";
 import MonthSelector from "@/components/MonthSelector";
 import { CATEGORIES } from "./constants";
 
@@ -144,25 +144,30 @@ export default function ExpensesClient({
       {/* Quick Add Bar (Collapsible / Default Open) */}
       {showQuickAdd && (
         <QuickAdd
-          defaultDate={
-            month === new Date().toISOString().slice(0, 7)
-              ? new Date().toISOString().slice(0, 10)
-              : `${month}-01`
-          }
+          defaultDate={(() => {
+            const todayNepal = getNepalTodayDate();
+            // Always record on today's actual day-of-month; if viewing another month, preserve today's day in that month
+            if (todayNepal.startsWith(month)) return todayNepal;
+            const todayDay = Number(todayNepal.slice(8, 10)) || 1;
+            const [y, m] = month.split("-").map(Number);
+            const maxDay = new Date(y, m, 0).getDate();
+            const safeDay = String(Math.min(todayDay, maxDay)).padStart(2, "0");
+            return `${month}-${safeDay}`;
+          })()}
           onSaved={() => handleRefresh(true)}
         />
       )}
 
       {/* View Switcher Tabs & Info Tip */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
-        <div className="inline-flex p-1 bg-slate-200/60 rounded-xl self-start">
+        <div className="inline-flex p-1 bg-slate-200/80 dark:bg-slate-800/90 border border-slate-200/60 dark:border-slate-700/80 rounded-xl self-start">
           <button
             type="button"
             onClick={() => setActiveTab("ledger")}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
               activeTab === "ledger"
-                ? "bg-white text-slate-900 shadow-xs"
-                : "text-slate-600 hover:text-slate-900"
+                ? "bg-white dark:bg-teal-600 text-slate-900 dark:text-white shadow-xs"
+                : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
             }`}
           >
             <TableProperties size={14} />
@@ -173,8 +178,8 @@ export default function ExpensesClient({
             onClick={() => setActiveTab("feed")}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
               activeTab === "feed"
-                ? "bg-white text-slate-900 shadow-xs"
-                : "text-slate-600 hover:text-slate-900"
+                ? "bg-white dark:bg-teal-600 text-slate-900 dark:text-white shadow-xs"
+                : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
             }`}
           >
             <ListFilter size={14} />
@@ -183,7 +188,7 @@ export default function ExpensesClient({
         </div>
 
         {activeTab === "ledger" && (
-          <div className="text-[11px] text-slate-500 flex items-center gap-1.5 bg-blue-50/70 border border-blue-100 text-blue-700 px-3 py-1 rounded-lg">
+          <div className="hidden sm:flex text-[11px] items-center gap-1.5 bg-blue-50 border border-blue-200 text-blue-700 px-3 py-1 rounded-lg">
             <Info size={13} className="shrink-0" />
             <span>Type directly into any row and press Enter or Save.</span>
           </div>

@@ -22,6 +22,30 @@ function formatNPR(amount: number): string {
   return `Rs. ${Math.round(amount).toLocaleString("en-US")}`;
 }
 
+function normalizeSide(side?: string | null): "Side A" | "Side B" | "Other" {
+  if (!side) return "Other";
+  const s = side.trim().toLowerCase();
+  if (s === "side a" || s === "a" || s === "side_a") return "Side A";
+  if (s === "side b" || s === "b" || s === "side_b") return "Side B";
+  return "Other";
+}
+
+function compareRoomsSerially(
+  a: { room_no: string; room_side?: string | null },
+  b: { room_no: string; room_side?: string | null }
+): number {
+  const sideOrder = { "Side A": 0, "Side B": 1, Other: 2 };
+  const sideDiff = sideOrder[normalizeSide(a.room_side)] - sideOrder[normalizeSide(b.room_side)];
+  if (sideDiff !== 0) return sideDiff;
+
+  const numA = parseInt((a.room_no.match(/\d+/) || [""])[0], 10);
+  const numB = parseInt((b.room_no.match(/\d+/) || [""])[0], 10);
+  if (!isNaN(numA) && !isNaN(numB) && numA !== numB) {
+    return numA - numB;
+  }
+  return a.room_no.localeCompare(b.room_no, undefined, { numeric: true, sensitivity: "base" });
+}
+
 interface TenantWithDetails {
   id: string;
   name: string | null;
@@ -47,10 +71,8 @@ async function getDashboardData(month: string) {
       .order("created_at", { ascending: true }),
   ]);
 
-  // Natural numeric room sort (e.g., Room 2 before Room 10)
-  const sortedTenants: TenantWithDetails[] = (activeTenants || []).slice().sort((a, b) => {
-    return a.room_no.localeCompare(b.room_no, undefined, { numeric: true, sensitivity: "base" });
-  });
+  // Strict serial sort: Side A (Room 0, 1, 2, 3...) then Side B (Room 0, 1, 2, 3...)
+  const sortedTenants: TenantWithDetails[] = (activeTenants || []).slice().sort(compareRoomsSerially);
 
   const invoices: InvoiceWithTenant[] = (monthInvoices || []).map((inv) => ({
     ...inv,
@@ -112,7 +134,7 @@ export default async function Dashboard({
 
   const nepaliMonthLabel = (() => {
     try {
-      return new NepaliDate(new Date(month + "-15")).format("MMMM YYYY");
+      return new NepaliDate(new Date(month + "-25")).format("MMMM YYYY");
     } catch {
       return month;
     }
@@ -185,8 +207,8 @@ export default async function Dashboard({
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 space-y-6">
 
-        {/* Action Banner (Only visible when attention is needed) */}
-        {stats.billsDraft > 0 ? (
+        {/* Action Banner (Only visible when meter readings are needed) */}
+        {stats.billsDraft > 0 && (
           <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-xl bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-400 shrink-0">
@@ -208,29 +230,7 @@ export default async function Dashboard({
               Enter Readings <ArrowRight size={13} />
             </Link>
           </div>
-        ) : stats.billsOverdue > 0 ? (
-          <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-rose-100 dark:bg-rose-900/60 text-rose-700 dark:text-rose-400 shrink-0">
-                <AlertCircle size={18} />
-              </div>
-              <div>
-                <p className="text-xs font-bold text-rose-900 dark:text-rose-200">
-                  {stats.billsOverdue} bill{stats.billsOverdue > 1 ? "s are" : " is"} unpaid for collection
-                </p>
-                <p className="text-xs text-rose-700 dark:text-rose-400">
-                  Rent grace period has passed for {nepaliMonthLabel}. Follow up with pending tenants.
-                </p>
-              </div>
-            </div>
-            <Link
-              href={`/?month=${month}&filter=unpaid`}
-              className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl transition-colors shrink-0"
-            >
-              View Unpaid <ArrowRight size={13} />
-            </Link>
-          </div>
-        ) : null}
+        )}
 
         {/* 3 Focused KPI Cards (No Expenses Card) */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -377,8 +377,23 @@ export default async function Dashboard({
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
-              {filteredRooms.map(({ tenant, invoice, hasBill, status, totalDue }) => {
+            <div className="space-y-6">
+              {(["Side A", "Side B", "Other"] as const).map((sideGroup) => {
+                const sideRooms = filteredRooms.filter(
+                  (r) => normalizeSide(r.tenant.room_side) === sideGroup
+                );
+                if (sideRooms.length === 0) return null;
+
+                return (
+                  <div key={sideGroup} className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-200/70 dark:bg-slate-800 px-3 py-1 rounded-lg tracking-wider uppercase">
+                        {sideGroup}
+                      </h3>
+                      <div className="h-px bg-slate-200 dark:bg-slate-800 flex-1" />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                      {sideRooms.map(({ tenant, invoice, hasBill, status, totalDue }) => {
                 const tenantName = tenant.name || `Tenant`;
                 const roomLabel = `Room ${tenant.room_no}`;
                 const sideLabel = tenant.room_side || "Main";
@@ -500,6 +515,10 @@ export default async function Dashboard({
                           <Zap size={12} /> Enter Reading &amp; Generate Bill
                         </Link>
                       )}
+                    </div>
+                  </div>
+                );
+              })}
                     </div>
                   </div>
                 );

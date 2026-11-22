@@ -22,14 +22,14 @@ export default function MonthSelector({
   const navigateMonth = (direction: number) => {
     const [year, mo] = currentMonth.split("-").map(Number);
     const newDate = new Date(year, mo - 1 + direction, 1);
-    const newMonth = newDate.toISOString().slice(0, 7);
+    const newMonth = `${newDate.getFullYear()}-${String(newDate.getMonth() + 1).padStart(2, "0")}`;
     const params = new URLSearchParams({ ...extraParams, month: newMonth });
     router.push(`${basePath}?${params.toString()}`);
   };
 
   const monthLabel = (() => {
     try {
-      return new NepaliDate(new Date(currentMonth + "-15")).format("MMMM YYYY");
+      return new NepaliDate(new Date(currentMonth + "-25")).format("MMMM YYYY");
     } catch {
       return currentMonth;
     }

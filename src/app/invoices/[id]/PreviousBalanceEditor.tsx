@@ -53,7 +53,7 @@ export default function PreviousBalanceEditor({
 
   const formatMonthName = (mStr: string) => {
     try {
-      return new NepaliDate(new Date(mStr + "-15")).format("MMMM YYYY");
+      return new NepaliDate(new Date(mStr + "-25")).format("MMMM YYYY");
     } catch {
       return mStr;
     }

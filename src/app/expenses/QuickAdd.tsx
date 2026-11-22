@@ -5,6 +5,20 @@ import { Plus, Loader2, Zap } from "lucide-react";
 import { addExpense } from "./actions";
 import { CATEGORIES } from "./constants";
 
+/** Returns today's YYYY-MM-DD in Nepal time (Asia/Kathmandu) so expenses always save on the actual date recorded. */
+export function getNepalTodayDate(): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Kathmandu",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+  } catch {
+    return new Date().toISOString().slice(0, 10);
+  }
+}
+
 export default function QuickAdd({
   defaultDate,
   onSaved,
@@ -18,11 +32,16 @@ export default function QuickAdd({
   const [category, setCategory] = useState("Other");
   const amountRef = useRef<HTMLInputElement>(null);
 
-  const effectiveDate = defaultDate || new Date().toISOString().slice(0, 10);
-
   const handleQuickSave = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!amount || Number(amount) <= 0 || isSaving) return;
+    if (isSaving) return;
+    if (!amount || Number(amount) <= 0) {
+      amountRef.current?.focus();
+      return;
+    }
+
+    // Always use the exact date the expense is recorded (Nepal time)
+    const recordedDate = defaultDate || getNepalTodayDate();
 
     setIsSaving(true);
     try {
@@ -30,7 +49,7 @@ export default function QuickAdd({
         amount: Number(amount),
         description: description.trim() || category,
         category,
-        expense_date: effectiveDate,
+        expense_date: recordedDate,
       });
 
       if (result.success) {
@@ -80,15 +99,15 @@ export default function QuickAdd({
           {/* Submit Button */}
           <button
             type="submit"
-            disabled={isSaving || !amount}
-            className="h-11 px-5 rounded-xl bg-slate-900 text-white flex items-center justify-center gap-2 font-bold text-sm hover:bg-slate-800 disabled:opacity-40 transition-all shrink-0 cursor-pointer shadow-md shadow-slate-900/10"
+            disabled={isSaving}
+            className="h-11 px-5 rounded-xl bg-teal-600 hover:bg-teal-500 active:bg-teal-700 text-white flex items-center justify-center gap-2 font-bold text-sm disabled:opacity-60 transition-all shrink-0 cursor-pointer shadow-md shadow-teal-600/25"
           >
             {isSaving ? (
-              <Loader2 className="animate-spin" size={16} />
+              <Loader2 className="animate-spin text-white" size={16} />
             ) : (
               <>
-                <Plus size={16} />
-                <span>Quick Add</span>
+                <Plus size={16} strokeWidth={2.5} className="text-white" />
+                <span className="text-white">Quick Add</span>
               </>
             )}
           </button>
@@ -107,10 +126,10 @@ export default function QuickAdd({
                 key={cat.id}
                 type="button"
                 onClick={() => setCategory(cat.id)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer border ${
                   isSelected
-                    ? "bg-slate-900 text-white shadow-xs"
-                    : "bg-slate-100/80 text-slate-600 hover:bg-slate-200/70"
+                    ? "bg-teal-600 text-white border-teal-500 shadow-xs"
+                    : "bg-slate-100 dark:bg-slate-800/90 text-slate-700 dark:text-slate-300 border-slate-200/80 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700"
                 }`}
               >
                 {cat.id}

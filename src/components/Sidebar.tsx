@@ -8,7 +8,6 @@ import {
   Zap,
   FileText,
   CreditCard,
-  Receipt,
   Settings,
   X,
   Menu,
@@ -17,6 +16,43 @@ import {
 } from "lucide-react";
 import InstallPWAButton from "@/components/InstallPWAButton";
 import ThemeToggle from "@/components/ThemeToggle";
+
+function NepaliReceiptIcon({
+  size = 18,
+  className = "",
+}: {
+  size?: number;
+  className?: string;
+}) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z" />
+      <text
+        x="12"
+        y="15.5"
+        textAnchor="middle"
+        fill="currentColor"
+        stroke="none"
+        fontSize="10.5"
+        fontWeight="800"
+        fontFamily="system-ui, sans-serif"
+      >
+        रु
+      </text>
+    </svg>
+  );
+}
 
 const navItems = [
   {
@@ -46,7 +82,7 @@ const navItems = [
   {
     label: "Expenses",
     href: "/expenses",
-    icon: Receipt,
+    icon: NepaliReceiptIcon,
     exact: false,
   },
   {

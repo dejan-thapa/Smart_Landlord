@@ -100,6 +100,7 @@ html.dark .bg-slate-50 {
   color: var(--text-primary);
 }
 
+html.dark .bg-slate-50\/20,
 html.dark .bg-slate-50\/50,
 html.dark .bg-slate-50\/75,
 html.dark .bg-slate-50\/80 {
@@ -117,11 +118,13 @@ html.dark .bg-white\/50 {
   background-color: rgba(30, 41, 59, 0.85) !important;
 }
 
-html.dark .bg-slate-100 {
+html.dark .bg-slate-100,
+html.dark .bg-slate-100\/80 {
   background-color: var(--bg-subtle) !important;
 }
 
 html.dark .bg-slate-200,
+html.dark .bg-slate-200\/60,
 html.dark .bg-slate-200\/80 {
   background-color: var(--bg-elevated) !important;
 }
@@ -139,6 +142,7 @@ html.dark .border-slate-300 {
 
 html.dark .divide-slate-50 > :not(:last-child),
 html.dark .divide-slate-100 > :not(:last-child),
+html.dark .divide-slate-100\/70 > :not(:last-child),
 html.dark .divide-slate-200 > :not(:last-child) {
   border-color: var(--border-default) !important;
 }
@@ -235,6 +239,7 @@ html.dark .text-rose-800 {
 }
 
 html.dark .bg-blue-50,
+html.dark .bg-blue-50\/70,
 html.dark .bg-blue-50\/50,
 html.dark .bg-blue-50\/30,
 html.dark .bg-blue-100,
@@ -254,6 +259,7 @@ html.dark .text-sky-600 {
 }
 
 html.dark .bg-teal-50,
+html.dark .bg-teal-50\/30,
 html.dark .bg-teal-100 {
   background-color: rgba(20, 184, 166, 0.15) !important;
 }

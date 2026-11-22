@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useEffect } from "react";
 import { X, Printer, CheckCircle2, Building2, Calendar, CreditCard, User, Home } from "lucide-react";
 import NepaliDate from "nepali-date-converter";
 import { PaymentRecord } from "./actions";
@@ -29,7 +29,7 @@ export default function ReceiptModal({ payment, onClose }: ReceiptModalProps) {
 
   const billingMonthLabel = (() => {
     try {
-      return new NepaliDate(new Date(payment.billing_month + "-15")).format("MMMM YYYY");
+      return new NepaliDate(new Date(payment.billing_month + "-25")).format("MMMM YYYY");
     } catch {
       return payment.billing_month;
     }
@@ -47,11 +47,25 @@ export default function ReceiptModal({ payment, onClose }: ReceiptModalProps) {
     window.print();
   };
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-      <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="bg-white rounded-3xl max-w-lg w-full max-h-[90vh] flex flex-col overflow-hidden shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150"
+      >
         {/* Top Control Bar */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/80">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 bg-slate-50/80 shrink-0">
           <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
             Payment Receipt
           </span>
@@ -76,7 +90,7 @@ export default function ReceiptModal({ payment, onClose }: ReceiptModalProps) {
         </div>
 
         {/* Printable Receipt Paper */}
-        <div ref={receiptRef} className="p-6 md:p-8 space-y-6 print:p-0">
+        <div ref={receiptRef} className="p-5 md:p-6 space-y-5 overflow-y-auto custom-scrollbar print:p-0">
           {/* Header */}
           <div className="flex items-start justify-between border-b border-slate-200 pb-5">
             <div className="flex items-center gap-3">
@@ -179,7 +193,7 @@ export default function ReceiptModal({ payment, onClose }: ReceiptModalProps) {
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end">
+        <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-100 flex justify-end shrink-0">
           <button
             onClick={onClose}
             className="px-4 py-2 rounded-xl text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 text-xs font-semibold transition-colors cursor-pointer"

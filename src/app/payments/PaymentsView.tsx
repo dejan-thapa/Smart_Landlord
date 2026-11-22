@@ -32,7 +32,7 @@ import { PaymentRecord, recordPaymentAction, revertPaymentAction } from "./actio
 
 function formatNepaliMonthLabel(billingMonth: string): string {
   try {
-    return new NepaliDate(new Date(billingMonth + "-15")).format("MMMM YYYY");
+    return new NepaliDate(new Date(billingMonth + "-25")).format("MMMM YYYY");
   } catch {
     return billingMonth;
   }
@@ -362,76 +362,76 @@ export default function PaymentsView({ initialPayments, month }: PaymentsViewPro
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6">
         {/* Total Collected */}
-        <div className="bg-white border border-slate-200/80 rounded-2xl p-4 md:p-5 shadow-xs relative overflow-hidden">
+        <div className="bg-slate-900 border border-slate-800 text-white rounded-2xl p-4 md:p-5 shadow-sm relative overflow-hidden">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+            <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
               Total Collected
             </span>
-            <span className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <span className="w-7 h-7 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center justify-center">
               <CheckCircle2 size={16} />
             </span>
           </div>
-          <p className="text-xl md:text-2xl font-black text-slate-900 font-mono">
+          <p className="text-xl md:text-2xl font-black text-white font-mono">
             Rs. {stats.totalCollected.toLocaleString()}
           </p>
           <div className="flex items-center gap-1.5 mt-2">
-            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-700">
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
               {stats.collectionRate}%
             </span>
-            <span className="text-[11px] text-slate-500 font-medium">of billed amount</span>
+            <span className="text-[11px] text-slate-400 font-medium">of billed amount</span>
           </div>
         </div>
 
         {/* Outstanding Receivables */}
-        <div className="bg-white border border-slate-200/80 rounded-2xl p-4 md:p-5 shadow-xs relative overflow-hidden">
+        <div className="bg-slate-900 border border-slate-800 text-white rounded-2xl p-4 md:p-5 shadow-sm relative overflow-hidden">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+            <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
               Outstanding Due
             </span>
-            <span className="w-7 h-7 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+            <span className="w-7 h-7 rounded-lg bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center justify-center">
               <Clock size={16} />
             </span>
           </div>
-          <p className="text-xl md:text-2xl font-black text-amber-600 font-mono">
+          <p className="text-xl md:text-2xl font-black text-amber-400 font-mono">
             Rs. {stats.totalOutstanding.toLocaleString()}
           </p>
-          <p className="text-[11px] text-slate-500 font-medium mt-2">
+          <p className="text-[11px] text-slate-400 font-medium mt-2">
             {stats.unpaidCount} unpaid bill{stats.unpaidCount === 1 ? "" : "s"}
           </p>
         </div>
 
         {/* Digital Collection Share */}
-        <div className="bg-white border border-slate-200/80 rounded-2xl p-4 md:p-5 shadow-xs relative overflow-hidden">
+        <div className="bg-slate-900 border border-slate-800 text-white rounded-2xl p-4 md:p-5 shadow-sm relative overflow-hidden">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+            <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
               Digital vs Cash
             </span>
-            <span className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+            <span className="w-7 h-7 rounded-lg bg-blue-500/15 text-blue-400 border border-blue-500/30 flex items-center justify-center">
               <CreditCard size={16} />
             </span>
           </div>
-          <p className="text-xl md:text-2xl font-black text-slate-900 font-mono">
+          <p className="text-xl md:text-2xl font-black text-white font-mono">
             {stats.digitalPercent}% Digital
           </p>
-          <p className="text-[11px] text-slate-500 font-medium mt-2">
+          <p className="text-[11px] text-slate-400 font-medium mt-2">
             {100 - stats.digitalPercent}% Cash payments
           </p>
         </div>
 
         {/* Verified Receipts */}
-        <div className="bg-white border border-slate-200/80 rounded-2xl p-4 md:p-5 shadow-xs relative overflow-hidden">
+        <div className="bg-slate-900 border border-slate-800 text-white rounded-2xl p-4 md:p-5 shadow-sm relative overflow-hidden">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+            <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
               Recorded Receipts
             </span>
-            <span className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+            <span className="w-7 h-7 rounded-lg bg-indigo-500/15 text-indigo-400 border border-indigo-500/30 flex items-center justify-center">
               <FileText size={16} />
             </span>
           </div>
-          <p className="text-xl md:text-2xl font-black text-slate-900 font-mono">
+          <p className="text-xl md:text-2xl font-black text-white font-mono">
             {stats.paidCount} Receipts
           </p>
-          <p className="text-[11px] text-slate-500 font-medium mt-2">
+          <p className="text-[11px] text-slate-400 font-medium mt-2">
             {monthLabel} period
           </p>
         </div>

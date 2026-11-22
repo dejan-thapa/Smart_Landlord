@@ -7,7 +7,7 @@ export type Expense = {
   id: string;
   description: string;
   amount: number;
-  category: "Loan Fee" | "Vegetables" | "Gas" | "Rice" | "WiFi (Home)" | "WiFi (Bhada)" | "Other";
+  category: "Fruits" | "Vegetables" | "Gas" | "Rice" | "WiFi (Home)" | "WiFi (Bhada)" | "Other";
   expense_date: string;
   created_at: string;
 };

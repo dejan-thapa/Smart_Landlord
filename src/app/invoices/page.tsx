@@ -38,7 +38,7 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
 
   const monthLabel = (() => {
     try {
-      return new NepaliDate(new Date(month + "-15")).format("MMMM YYYY");
+      return new NepaliDate(new Date(month + "-25")).format("MMMM YYYY");
     } catch {
       return month;
     }

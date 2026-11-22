@@ -44,7 +44,7 @@ export function normalizePhoneNumber(rawPhone?: string | null): string {
  */
 export function formatNepaliMonth(monthStr: string): string {
   try {
-    return new NepaliDate(new Date(monthStr + "-15")).format("MMMM YYYY");
+    return new NepaliDate(new Date(monthStr + "-25")).format("MMMM YYYY");
   } catch {
     return monthStr;
   }

@@ -358,7 +358,7 @@ export async function sendInvoiceEmail(invoiceId: string, emailOverride?: string
   const recipientEmail = emailOverride || tenant?.email;
   if (!tenant || !recipientEmail) return { success: false, error: "Recipient does not have an email address." };
 
-  const monthLabel = new NepaliDate(new Date(invoice.billing_month + "-01")).format("MMMM YYYY");
+  const monthLabel = new NepaliDate(new Date(invoice.billing_month + "-25")).format("MMMM YYYY");
   const prevBalance = getInvoicePreviousBalance(invoice);
 
   try {

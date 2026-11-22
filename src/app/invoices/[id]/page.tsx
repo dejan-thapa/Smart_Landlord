@@ -76,7 +76,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             Bill
           </h1>
           <p className="text-slate-500 font-medium text-sm">
-            {new NepaliDate(new Date(invoice.billing_month + "-01")).format("MMMM YYYY")}
+            {new NepaliDate(new Date(invoice.billing_month + "-25")).format("MMMM YYYY")}
           </p>
         </div>
         <div className="ml-auto">
